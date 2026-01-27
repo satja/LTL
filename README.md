@@ -14,7 +14,7 @@ This repo now supports three clearly distinct planning approaches for comparison
 
 - Planner (`planner.cpp`): Implements the locality-based “graph of substates” algorithm with locality parameter `L`. It restricts what can still change and prunes using validity checks over a moving window.
 - Brute-force with step pruning (`bruteforce-planner.cpp`): Explores full valuations plus temporal memory and prunes immediately if any value is violated at an intermediate step. This is a strong but still-local baseline that enforces values “online.”
-- Automata / progression baseline (`ltlf-progress-planner.cpp`): Uses a standard LTLf idea from the literature: translate the temporal goals into an automaton (or build it on the fly) and search in the product of planning states and automaton states. Here we build the automaton state on the fly using syntactic progression of the formulas. citeturn0search3turn0search5
+- Automata / progression baseline (`ltlf-progress-planner.cpp`): Uses a standard LTLf idea from the literature: translate the temporal goals into an automaton (or build it on the fly) and search in the product of planning states and automaton states. Here we build the automaton state on the fly using syntactic progression of the formulas.
 
 ### Automata / Progression Baseline Details
 
@@ -27,7 +27,7 @@ idea is:
 
 This is exactly the automata/product-state approach used in LTLf synthesis and
 planning, but done on the fly via progression rather than pre-building a full
-automaton. citeturn0search3turn0search5
+automaton.
 
 Concretely, `ltlf-progress-planner.cpp` does the following:
 
@@ -50,6 +50,11 @@ Two modeling notes that match the current validator:
   mirrors this for root-level `FG` values.
 - Nested `FG` occurrences are handled conservatively by removing them from the
   progression state and checking only root-level `FG` at the end.
+
+References (automata / LTLf background):
+
+- De Giacomo, G., & Vardi, M. Y. (2013). Linear Temporal Logic and Linear Dynamic Logic on Finite Traces.
+- Camacho, A., Baier, J. A., Muise, C., & McIlraith, S. A. (2018). Finite LTL Synthesis as Planning.
 
 ## 1) Basic Setup: Build, Run, Validate
 
@@ -166,6 +171,8 @@ On these 30 cases:
 - Automata baseline successes: 20 / 30.
 
 These counts come directly from `tests_systematic/benchmark.csv`.
+Here, “success” means the planner exited with status `0` within the configured
+timeout. The benchmark script does not run `validate`.
 
 ![Benchmark Runtime vs n](tests_systematic/benchmark-time-vs-n.png)
 ![Benchmark Runtime per Case](tests_systematic/benchmark-time-vs-case.png)
@@ -239,3 +246,6 @@ Results on 57 cases:
 - Locality planner: 56 ok, 1 fail (`case-0`).
 - Brute force: 16 ok, 41 fail.
 - Automata baseline: 31 ok, 26 fail.
+
+In the test runner, “ok” means both the planner/baseline and `validate` exited
+with status `0` within their timeouts.
