@@ -890,7 +890,7 @@ static std::vector<std::string> reconstruct_plan(const std::vector<QueueNode>& n
     return plan;
 }
 
-static std::vector<std::string> find_plan_progression(int max_depth) {
+static bool find_plan_progression(int max_depth, std::vector<std::string>& plan) {
     const std::vector<std::string> actions = collectActions();
 
     AutomataState initial;
@@ -904,7 +904,8 @@ static std::vector<std::string> find_plan_progression(int max_depth) {
     for (const NodePtr& f : initial.residuals) {
         NodePtr pf = simplify(progress(f, initial.lv, initial.gv));
         if (is_false(pf)) {
-            return {};
+            plan.clear();
+            return false;
         }
         progressed_initial.push_back(pf);
     }
@@ -919,7 +920,8 @@ static std::vector<std::string> find_plan_progression(int max_depth) {
         }
     }
     if (initial_accepts_empty && final_constraints_hold(initial.lv, initial.gv)) {
-        return {};
+        plan.clear();
+        return true;
     }
 
     std::vector<QueueNode> nodes;
@@ -976,7 +978,8 @@ static std::vector<std::string> find_plan_progression(int max_depth) {
             if (empty_ok && final_constraints_hold(next_state.lv, next_state.gv)) {
                 QueueNode accept_node{next_state, cur_node.depth + 1, idx, action};
                 nodes.push_back(std::move(accept_node));
-                return reconstruct_plan(nodes, static_cast<int>(nodes.size() - 1));
+                plan = reconstruct_plan(nodes, static_cast<int>(nodes.size() - 1));
+                return true;
             }
 
             const int next_depth = cur_node.depth + 1;
@@ -992,7 +995,8 @@ static std::vector<std::string> find_plan_progression(int max_depth) {
         }
     }
 
-    return {};
+    plan.clear();
+    return false;
 }
 
 // ---------------- Parsing and I/O ----------------
@@ -1225,11 +1229,12 @@ int main(int argc, char** argv) {
     readProblem(std::cin);
 
     std::vector<std::string> plan = input_actions;
+    bool found = true;
     if (plan.empty()) {
-        plan = find_plan_progression(maxDepth);
+        found = find_plan_progression(maxDepth, plan);
     }
 
-    if (plan.empty()) {
+    if (!found) {
         std::cerr << "No satisfying plan found up to depth " << maxDepth
                   << " (automata baseline).\n";
         return 1;

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <cctype>
 
 /*
 Brute-force planner for the locality-based LTL validator input format.
@@ -87,6 +88,89 @@ static int getValueForKey(int key) {
     return gv_values[git->second];
 }
 
+static std::string trimString(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) {
+        start++;
+    }
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
+        end--;
+    }
+    return s.substr(start, end - start);
+}
+
+static std::string stripOuterParens(const std::string& s) {
+    std::string cur = trimString(s);
+    while (!cur.empty() && cur.front() == '(' && cur.back() == ')') {
+        int depth = 0;
+        bool wrapsAll = true;
+        for (int i = 0; i < static_cast<int>(cur.size()); i++) {
+            if (cur[i] == '(') depth++;
+            if (cur[i] == ')') depth--;
+            if (depth == 0 && i != static_cast<int>(cur.size()) - 1) {
+                wrapsAll = false;
+                break;
+            }
+        }
+        if (!wrapsAll) break;
+        cur = trimString(cur.substr(1, cur.size() - 2));
+    }
+    return cur;
+}
+
+static bool splitTopLevelOps(const std::string& expr,
+                             std::vector<std::string>& parts_out,
+                             std::vector<int>& ops_out) {
+    std::string current;
+    int depth = 0;
+    auto match_word = [&](int i, const std::string& word) {
+        if (i + static_cast<int>(word.size()) > static_cast<int>(expr.size())) return false;
+        if (expr.compare(i, word.size(), word) != 0) return false;
+        const bool left_ok = (i == 0) || std::isspace(static_cast<unsigned char>(expr[i - 1]));
+        const bool right_ok =
+            (i + static_cast<int>(word.size()) == static_cast<int>(expr.size())) ||
+            std::isspace(static_cast<unsigned char>(expr[i + word.size()]));
+        return left_ok && right_ok;
+    };
+
+    for (int i = 0; i < static_cast<int>(expr.size()); i++) {
+        const char ch = expr[i];
+        if (ch == '(') depth++;
+        if (ch == ')') depth--;
+
+        if (depth == 0) {
+            if (match_word(i, "AND")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["AND"]);
+                i += 2;
+                continue;
+            }
+            if (match_word(i, "OR")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["OR"]);
+                i += 1;
+                continue;
+            }
+            if (match_word(i, "U")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["U"]);
+                continue;
+            }
+        }
+        current.push_back(ch);
+    }
+
+    if (!current.empty()) {
+        parts_out.push_back(trimString(current));
+    }
+
+    return !ops_out.empty();
+}
+
 class formula {
     std::vector<formula*> parts;
     std::vector<int> operators;
@@ -94,8 +178,9 @@ class formula {
     std::vector<int> xPrepared;
     std::vector<int> xTrue;
     int xInd = 0;
+    std::vector<int> uRes;
     std::vector<int> fTrue;
-    int fInd = 0;
+    int fInd = 0, uInd = 0;
     std::vector<int> gFalse;
     int gInd = 0;
     int lastAction = 0;
@@ -221,6 +306,20 @@ class formula {
                 formula* fs = new formula(subf);
                 parts.push_back(fs);
             } else {
+                // Prefer a top-level split for nested parentheses.
+                std::string stripped = stripOuterParens(f);
+                std::vector<std::string> top_parts;
+                std::vector<int> top_ops;
+                if (splitTopLevelOps(stripped, top_parts, top_ops)) {
+                    for (const std::string& part : top_parts) {
+                        if (!part.empty()) {
+                            parts.push_back(new formula(part));
+                        }
+                    }
+                    operators = top_ops;
+                    return;
+                }
+
                 // Parse a parenthesized binary chain.
                 if (f[0] == '(' && f[1] == '(') {
                     std::string tmp = "";
@@ -245,7 +344,7 @@ class formula {
                             break;
                         }
                         int j = i + 2;
-                        while (f[j] != ' ') {
+                        while (j < static_cast<int>(f.size()) && f[j] != ' ') {
                             subf += f[j];
                             j++;
                         }
@@ -374,6 +473,23 @@ class formula {
                 truth = val1 || val2;
                 return truth;
             }
+            if (op == "U") {
+                if (uRes.size() > uInd) {
+                    if (uRes[uInd] == 1) return 1;
+                    if (uRes[uInd] == -1) return 0;
+                }
+                if (!val1 && !val2) {
+                    uRes.push_back(-1);
+                    uInd++;
+                    return 0;
+                }
+                if (val1 && !val2) return 1;
+                if (val2) {
+                    uRes.push_back(1);
+                    uInd++;
+                    return 1;
+                }
+            }
             return truth;
         }
 
@@ -460,9 +576,43 @@ class formula {
                     truth = truth || parts[partsInd]->evaluate();
                     partsInd++;
                 }
+            } else if (op == "U") {
+                int t1 = 0;
+                if (i + 1 < static_cast<int>(operators.size())) {
+                    if (key_operator[operators[i + 1]] == "NOT") {
+                        assert(partsInd < static_cast<int>(parts.size()));
+                        t1 = (1 - parts[partsInd]->evaluate());
+                        partsInd++;
+                        i++;
+                    } else {
+                        assert(partsInd < static_cast<int>(parts.size()));
+                        t1 = parts[partsInd]->evaluate();
+                        partsInd++;
+                        i++;
+                    }
+
+                    if (uRes.size() > uInd) {
+                        if (uRes[uInd] == 1) {
+                            truth = 1;
+                        } else if (uRes[uInd] == -1) {
+                            truth = 0;
+                        }
+                    } else {
+                        if (!truth && !t1) {
+                            uRes.push_back(-1);
+                            uInd++;
+                            truth = 0;
+                        }
+                        if (t1) {
+                            uRes.push_back(1);
+                            uInd++;
+                            truth = 1;
+                        }
+                    }
+                }
             }
         }
-        xInd = fInd = gInd = 0;
+        xInd = fInd = gInd = uInd = 0;
         return truth;
     }
 };
@@ -704,7 +854,7 @@ static bool dfsPlan(const PlannerState& state,
 }
 
 // Find a satisfying plan up to a maximum depth bound.
-static std::vector<std::string> findPlan(int maxDepth) {
+static bool findPlan(int maxDepth, std::vector<std::string>& plan) {
     PlannerState initial;
     initial.lv = initial_lv_values;
     initial.gv = initial_gv_values;
@@ -716,13 +866,12 @@ static std::vector<std::string> findPlan(int maxDepth) {
     assert(initialOk);
 
     const std::vector<std::string> actionsList = collectActions();
-    std::vector<std::string> plan;
     std::unordered_set<std::string> visited;
     const bool found = dfsPlan(initial, 0, maxDepth, actionsList, plan, visited);
     if (!found) {
         plan.clear();
     }
-    return plan;
+    return found;
 }
 
 /*
@@ -955,11 +1104,12 @@ int main(int argc, char** argv) {
 
     // If a plan is provided, prefer it; otherwise synthesize one.
     std::vector<std::string> plan = input_actions;
+    bool found = true;
     if (plan.empty()) {
-        plan = findPlan(maxDepth);
+        found = findPlan(maxDepth, plan);
     }
 
-    if (plan.empty()) {
+    if (!found) {
         std::cerr << "No satisfying plan found up to depth " << maxDepth << '\n';
         return 1;
     }

@@ -926,6 +926,19 @@ static void applyAction(const std::string& action) {
 
 /* Validate the provided action sequence against all values in Omega. */
 static bool validatePlan(const std::vector<std::string>& plan) {
+    if (plan.empty()) {
+        for (NamedFormula& nf : local_formulas) {
+            assert(nf.node != nullptr);
+            nf.node->setLastAction();
+        }
+        for (NamedFormula& nf : global_formulas) {
+            assert(nf.node != nullptr);
+            nf.node->setLastAction();
+        }
+        return evaluateFormulas(local_formulas, "Local", 0, "") &&
+               evaluateFormulas(global_formulas, "Global", 0, "");
+    }
+
     if (!evaluateFormulas(local_formulas, "Local", 0, "") ||
         !evaluateFormulas(global_formulas, "Global", 0, "")) {
         return false;
@@ -967,13 +980,6 @@ int main(void){
  readProblem(std::cin);
 
  assert(lv_values != nullptr);
-
- if (actions.empty()) {
-     std::cerr << "No action sequence provided." << std::endl;
-     delete []lv_values;
-     delete []gv_values;
-     return 2;
- }
 
  const bool valid = validatePlan(actions);
  delete []lv_values;

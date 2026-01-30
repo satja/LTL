@@ -142,7 +142,8 @@ Example (planner under 10s, baselines under 30s):
   --planner-timeout 10 \
   --bf-timeout 30 \
   --auto-timeout 30 \
-  --out tests_systematic/benchmark.csv
+  --out tests_systematic/benchmark.csv \
+  --validate
 ```
 
 Flag details for benchmarking live in `benchmark.sh`, `planner.cpp`, `bruteforce-planner.cpp`, and `ltlf-progress-planner.cpp`.
@@ -152,8 +153,11 @@ Behavior:
 - If `--dir .` is used, `deprecated/` is excluded automatically.
 - The CSV includes both baselines: `bruteforce_*` and `automata_*`.
 - Timeout statuses are typically `124` or `137` (normalized to the timeout value for clearer plots).
+- With `--validate`, the CSV adds `planner_valid`, `bf_valid`, and `auto_valid`:
+  `0` means valid, `1` means invalid, `2` means skipped because the planner
+  failed or timed out. Validation is not included in the timing.
 
-### Current Benchmark Snapshot (January 27, 2026)
+### Current Benchmark Snapshot (January 30, 2026)
 
 The checked-in benchmark and plots were generated with:
 
@@ -161,45 +165,48 @@ The checked-in benchmark and plots were generated with:
 ./benchmark.sh \
   --dir tests_systematic \
   --L 3 \
-  --max-depth 80 \
+  --max-depth 160 \
   --planner-timeout 10 \
-  --bf-timeout 5 \
-  --auto-timeout 5 \
-  --limit 30 \
-  --out tests_systematic/benchmark.csv
+  --bf-timeout 30 \
+  --auto-timeout 30 \
+  --out tests_systematic/benchmark.csv \
+  --validate
 python3 plot-benchmarks.py --csv tests_systematic/benchmark.csv
 ```
 
-On these 30 cases:
+On these 57 cases (validation enabled):
 
-- Locality planner successes: 29 / 30.
-- Brute-force successes: 15 / 30.
-- Automata baseline successes: 20 / 30.
+- Locality planner successes: 57 / 57 (all 57 validated).
+- Automata baseline successes: 57 / 57 (all 57 validated).
+- Brute-force successes: 41 / 57 (41 validated, 16 timeouts).
 
 These counts come directly from `tests_systematic/benchmark.csv`.
 Here, “success” means the planner exited with status `0` within the configured
-timeout. The benchmark script does not run `validate`.
+timeout. With `--validate`, all successful outputs are also checked by
+`./validate`.
+
+Runtime summary (successful runs only):
+- Locality planner: mean 0.011s, median 0.01s, max 0.04s.
+- Automata baseline: mean 1.55s, median 0.01s, max 21.32s.
+- Brute force: mean 1.84s, median 0.01s, max 29.19s.
 
 ![Benchmark Runtime vs n](tests_systematic/benchmark-time-vs-n.png)
 ![Benchmark Runtime per Case](tests_systematic/benchmark-time-vs-case.png)
 
 ### Results Discussion
 
-Across both the benchmark snapshot (30 cases) and the full batch run (57 cases
-on January 27, 2026), the locality-based planner is the most reliable within
-the same depth and timeout budgets. The automata/progression baseline is a
-meaningful improvement over the brute-force baseline under tight timeouts, but
-it still trails the locality planner on larger instances.
+The locality-based planner is consistently fastest and solved all 57 cases
+within the 10s timeout. The automata/progression baseline also solved all 57
+cases, but with substantially higher average runtime and several multi-second
+instances. The brute-force baseline timed out on 16 cases under the 30s bound,
+even though its median successful time is small.
 
 A practical reading of the comparison is:
 
 - Locality pruning dominates in this structured domain.
-- Automata/progression pruning is helpful and “literature-standard,” but it does
-  not exploit the interval/locality structure.
+- Automata/progression pruning is helpful but does not exploit the
+  interval/locality structure, so it pays a higher per-instance cost.
 - Brute-force step pruning is the weakest of the three under the current bounds.
-
-The persistent `case-0` failure is consistent across approaches and appears to
-be an unsatisfiable instance under the given depth bounds.
 
 ### Plotting
 

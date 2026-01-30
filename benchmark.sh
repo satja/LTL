@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Benchmark the locality planner and two baselines on *.input-only.txt and emit a CSV.
 # Usage:
-#   ./benchmark.sh [--dir tests] [--L 3] [--max-depth 80] [--planner-timeout 10] [--bf-timeout 30] [--auto-timeout 30] [--limit 0] [--out tests/benchmark.csv]
+#   ./benchmark.sh [--dir tests] [--L 3] [--max-depth 80] [--planner-timeout 10] [--bf-timeout 30] [--auto-timeout 30] [--limit 0] [--out tests/benchmark.csv] [--validate]
 # Flags:
 #   --dir DIR: directory containing *.input-only.txt (default: tests)
 #   --L L: locality parameter forwarded to ./planner --L (default: 3)
@@ -13,6 +13,7 @@ set -euo pipefail
 #   --auto-timeout S: timeout seconds for automata/progression baseline (default: 30)
 #   --limit K: cap number of cases; 0 means no cap (default: 0)
 #   --out FILE: output CSV path (default: tests/benchmark.csv)
+#   --validate: run ./validate on each produced output (not timed)
 
 DIR="tests"
 L=3
@@ -22,6 +23,7 @@ BF_TIMEOUT=30
 AUTO_TIMEOUT=30
 LIMIT=0
 OUT="tests/benchmark.csv"
+VALIDATE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +43,8 @@ while [[ $# -gt 0 ]]; do
       LIMIT="$2"; shift 2;;
     --out)
       OUT="$2"; shift 2;;
+    --validate)
+      VALIDATE=1; shift 1;;
     *)
       echo "Unknown arg: $1" >&2; exit 2;;
   esac
@@ -107,10 +111,24 @@ run_timed() {
     elapsed="$timeout_secs"
   fi
   rm -f "$tmp_time"
-  echo "$status,$elapsed"
+echo "$status,$elapsed"
 }
 
-echo "case,n,broken_count,planner_status,planner_time_s,bruteforce_status,bruteforce_time_s,automata_status,automata_time_s" > "$OUT"
+validate_output() {
+  local output_file="$1"
+  local status
+  set +e
+  ./validate < "$output_file" >/dev/null 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    echo "0"
+  else
+    echo "1"
+  fi
+}
+
+echo "case,n,broken_count,planner_status,planner_time_s,bruteforce_status,bruteforce_time_s,automata_status,automata_time_s,planner_valid,bf_valid,auto_valid" > "$OUT"
 
 shopt -s nullglob
 case_count=0
@@ -149,7 +167,25 @@ for f in "${FILES[@]}"; do
   IFS=',' read -r bf_status bf_time < <(run_timed "$f" "$bf_out" "$BF_TIMEOUT" ./bruteforce-planner --max-depth "$MAX_DEPTH")
   IFS=',' read -r auto_status auto_time < <(run_timed "$f" "$auto_out" "$AUTO_TIMEOUT" ./ltlf-progress-planner --max-depth "$MAX_DEPTH")
 
-  echo "$case_name,$n_val,$broken_cnt,$planner_status,$planner_time,$bf_status,$bf_time,$auto_status,$auto_time" >> "$OUT"
+  planner_valid="na"
+  bf_valid="na"
+  auto_valid="na"
+  if [[ "$VALIDATE" -eq 1 ]]; then
+    planner_valid="2"
+    bf_valid="2"
+    auto_valid="2"
+    if [[ "$planner_status" -eq 0 ]]; then
+      planner_valid=$(validate_output "$planner_out")
+    fi
+    if [[ "$bf_status" -eq 0 ]]; then
+      bf_valid=$(validate_output "$bf_out")
+    fi
+    if [[ "$auto_status" -eq 0 ]]; then
+      auto_valid=$(validate_output "$auto_out")
+    fi
+  fi
+
+  echo "$case_name,$n_val,$broken_cnt,$planner_status,$planner_time,$bf_status,$bf_time,$auto_status,$auto_time,$planner_valid,$bf_valid,$auto_valid" >> "$OUT"
   echo "benchmarked $case_name (planner ${planner_time}s, bf ${bf_time}s, auto ${auto_time}s)"
   case_count=$((case_count + 1))
 done

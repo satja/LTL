@@ -32,16 +32,16 @@ FALSE
 + f9 on9 : NOT (on8) OR (NOT (on10))
 + f1 on1 : TRUE
 + f10 on10 : TRUE
-+ h1 on1 : TRUE
-+ h2 on2 : TRUE
-+ h3 on3 : TRUE
-+ h4 on4 : TRUE
-+ h5 on5 : TRUE
-+ h6 on6 : TRUE
-+ h7 on7 : TRUE
-+ h8 on8 : TRUE
-+ h9 on9 : TRUE
-+ h10 on10 : TRUE
++ h1 on1 : NOT (broken1)
++ h2 on2 : NOT (broken2)
++ h3 on3 : NOT (broken3)
++ h4 on4 : NOT (broken4)
++ h5 on5 : NOT (broken5)
++ h6 on6 : NOT (broken6)
++ h7 on7 : NOT (broken7)
++ h8 on8 : NOT (broken8)
++ h9 on9 : NOT (broken9)
++ h10 on10 : NOT (broken10)
 + f2 congestion : NOT (on1) AND (NOT (on3))
 + f3 congestion : NOT (on2) AND (NOT (on4))
 + f4 congestion : NOT (on3) AND (NOT (on5))

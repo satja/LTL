@@ -85,6 +85,11 @@ static int getValueForKey(int key) {
     return gv_values[git->second];
 }
 
+static std::string stripOuterParens(const std::string& s);
+static bool splitTopLevelOps(const std::string& expr,
+                             std::vector<std::string>& parts_out,
+                             std::vector<int>& ops_out);
+
 class formula {
     std::vector<formula*> parts;
     std::vector<int> operators;
@@ -163,6 +168,21 @@ class formula {
                 formula* fs = new formula(subf);
                 parts.push_back(fs);
             } else {
+                // Prefer a top-level split when we have nested parentheses.
+                std::string stripped = stripOuterParens(f);
+                std::vector<std::string> top_parts;
+                std::vector<int> top_ops;
+                if (splitTopLevelOps(stripped, top_parts, top_ops)) {
+                    for (const std::string& part : top_parts) {
+                        if (!part.empty()) {
+                            formula* fs = new formula(part);
+                            parts.push_back(fs);
+                        }
+                    }
+                    operators = top_ops;
+                    return;
+                }
+
                 if (f[0] == '(' && f[1] == '(') {
                     std::string tmp = "";
                     for (int i = 1; i < static_cast<int>(f.size()) - 1; i++) {
@@ -185,7 +205,7 @@ class formula {
                             break;
                         }
                         int j = i + 2;
-                        while (f[j] != ' ') {
+                        while (j < static_cast<int>(f.size()) && f[j] != ' ') {
                             subf += f[j];
                             j++;
                         }
@@ -435,6 +455,59 @@ static std::string stripOuterParens(const std::string& s) {
         cur = trim(cur.substr(1, cur.size() - 2));
     }
     return cur;
+}
+
+// Split a formula into top-level parts by AND/OR/U (depth 0 only).
+static bool splitTopLevelOps(const std::string& expr,
+                             std::vector<std::string>& parts_out,
+                             std::vector<int>& ops_out) {
+    std::string current;
+    int depth = 0;
+    auto match_word = [&](int i, const std::string& word) {
+        if (i + static_cast<int>(word.size()) > static_cast<int>(expr.size())) return false;
+        if (expr.compare(i, word.size(), word) != 0) return false;
+        const bool left_ok = (i == 0) || std::isspace(static_cast<unsigned char>(expr[i - 1]));
+        const bool right_ok =
+            (i + static_cast<int>(word.size()) == static_cast<int>(expr.size())) ||
+            std::isspace(static_cast<unsigned char>(expr[i + word.size()]));
+        return left_ok && right_ok;
+    };
+
+    for (int i = 0; i < static_cast<int>(expr.size()); i++) {
+        const char ch = expr[i];
+        if (ch == '(') depth++;
+        if (ch == ')') depth--;
+
+        if (depth == 0) {
+            if (match_word(i, "AND")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["AND"]);
+                i += 2;
+                continue;
+            }
+            if (match_word(i, "OR")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["OR"]);
+                i += 1;
+                continue;
+            }
+            if (match_word(i, "U")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["U"]);
+                continue;
+            }
+        }
+        current.push_back(ch);
+    }
+
+    if (!current.empty()) {
+        parts_out.push_back(trim(current));
+    }
+
+    return !ops_out.empty();
 }
 
 // Infer location index loc(p) from a local proposition name like "on7".
@@ -1015,7 +1088,7 @@ static bool dfs(Substate& cur,
     return false;
 }
 
-static std::vector<std::string> synthesizePlan(int L) {
+static bool synthesizePlan(int L, std::vector<std::string>& plan) {
     const int maxIndex = std::max(0, nLoc - 2 * L);
 
     // Initial substate S0 from Definition 3 (i=0, T from s0, Theta from s0).
@@ -1026,15 +1099,17 @@ static std::vector<std::string> synthesizePlan(int L) {
     updateTheta(initial, L);
 
     if (!checkAlwaysConstraints(initial, L) || !globalValid(initial, L)) {
-        return {};
+        plan.clear();
+        return false;
     }
 
-    std::vector<std::string> plan;
     std::unordered_set<std::string> visited;
     Substate cur = initial;
     const bool found = dfs(cur, L, maxIndex, plan, visited);
-    if (!found) plan.clear();
-    return plan;
+    if (!found) {
+        plan.clear();
+    }
+    return found;
 }
 
 // ----- Input parsing and output emission -----
@@ -1239,11 +1314,12 @@ int main(int argc, char** argv) {
     buildActionInfo();
 
     std::vector<std::string> plan = input_actions;
+    bool found = true;
     if (plan.empty()) {
-        plan = synthesizePlan(L);
+        found = synthesizePlan(L, plan);
     }
 
-    if (plan.empty()) {
+    if (!found) {
         std::cerr << "No satisfying plan found (L=" << L << ").\n";
         return 1;
     }
