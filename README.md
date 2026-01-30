@@ -120,6 +120,12 @@ Flag details for the generator live in `gen-systematic-tests.cpp`.
 
 Deprecated random tests and the old generator live under `deprecated/`.
 
+Additional example input:
+
+- `ProblemDescriptionC.txt`: includes chargers (`charged_i`) and a `lowBattery`
+  proposition with explicit initial values. It exercises the `U` operator in
+  value formulas (e.g., `NOT(charged_i) U lowBattery`).
+
 ## 3) Running Benchmarks and Generating Charts
 
 ### Benchmarking

@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <cctype>
 #include <cassert>
 
 /*
@@ -59,6 +60,86 @@ static int getValueForKey(int key) {
     return gv_values[git->second];
 }
 
+static std::string trim(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) {
+        start++;
+    }
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
+        end--;
+    }
+    return s.substr(start, end - start);
+}
+
+static std::string strip_outer_parens(const std::string& s) {
+    std::string out = trim(s);
+    if (out.size() < 2 || out.front() != '(' || out.back() != ')') {
+        return out;
+    }
+    int depth = 0;
+    for (size_t i = 0; i < out.size(); i++) {
+        if (out[i] == '(') depth++;
+        else if (out[i] == ')') depth--;
+        if (depth == 0 && i != out.size() - 1) {
+            return out;  // outer parens do not wrap the full string
+        }
+    }
+    return trim(out.substr(1, out.size() - 2));
+}
+
+static bool split_top_level_ops(const std::string& expr,
+                                std::vector<std::string>& parts_out,
+                                std::vector<int>& ops_out) {
+    std::string current;
+    int depth = 0;
+    auto match_word = [&](size_t i, const std::string& word) {
+        if (i + word.size() > expr.size()) return false;
+        if (expr.compare(i, word.size(), word) != 0) return false;
+        const bool left_ok = (i == 0) || std::isspace(static_cast<unsigned char>(expr[i - 1]));
+        const bool right_ok =
+            (i + word.size() == expr.size()) ||
+            std::isspace(static_cast<unsigned char>(expr[i + word.size()]));
+        return left_ok && right_ok;
+    };
+
+    for (size_t i = 0; i < expr.size(); i++) {
+        const char ch = expr[i];
+        if (ch == '(') depth++;
+        if (ch == ')') depth--;
+
+        if (depth == 0) {
+            if (match_word(i, "AND")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["AND"]);
+                i += 2;
+                continue;
+            }
+            if (match_word(i, "OR")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["OR"]);
+                i += 1;
+                continue;
+            }
+            if (match_word(i, "U")) {
+                parts_out.push_back(trim(current));
+                current.clear();
+                ops_out.push_back(operator_key["U"]);
+                continue;
+            }
+        }
+        current.push_back(ch);
+    }
+
+    if (!current.empty()) {
+        parts_out.push_back(trim(current));
+    }
+
+    return !ops_out.empty();
+}
+
 class formula{
 
    std::vector<formula*> parts;
@@ -67,8 +148,9 @@ class formula{
    std::vector<int> xPrepared;
    std::vector<int> xTrue;
    int xInd = 0;
+   std::vector<int> uRes;
    std::vector<int> fTrue;
-   int fInd = 0;
+   int fInd = 0, uInd = 0;
    std::vector<int> gFalse;
    int gInd = 0;
    int lastAction = 0;
@@ -135,6 +217,21 @@ class formula{
             parts.push_back(fs);
            }
            else{//case (v1 op1 v2 op2 .... vk ) op () .... ()
+              // Try a top-level split on AND/OR/U with balanced parentheses.
+              std::string stripped = strip_outer_parens(f);
+              std::vector<std::string> top_parts;
+              std::vector<int> top_ops;
+              if (split_top_level_ops(stripped, top_parts, top_ops)) {
+                for (const std::string& part : top_parts) {
+                    if (!part.empty()) {
+                        formula* fs = new formula(part);
+                        parts.push_back(fs);
+                    }
+                }
+                operators = top_ops;
+                return;
+              }
+
               if(f[0] == '(' && f[1] == '('){ //case ((v1 op1 v2 op20 op () ... ()))
                         std::string tmp = "";
                         for(int i=1;i<f.size()-1;i++)
@@ -298,6 +395,23 @@ class formula{
              truth = val1 || val2;
              return truth;
          }
+         else if(op == "U"){
+             if(uRes.size() > uInd){
+                 if(uRes[uInd] == 1) return 1;
+                 if(uRes[uInd] == -1) return 0;
+             }
+             if(!val1 && !val2){ // left false, right false -> until false
+                 uRes.push_back(-1);
+                 uInd++;
+                 return 0;
+             }
+             if(val1 && !val2) return 1; // left true, right still false
+             if(val2){ // right true, left not reported false before
+                 uRes.push_back(1);
+                 uInd++;
+                 return 1;
+             }
+         }
          return truth;
       }
       else{//case NOT (X, F, G, FG) (v1) op1 v2 op2 NOT (v2) op3 v3 op4 ...
@@ -408,9 +522,44 @@ class formula{
                               partsInd++;     
                       }
               }
+              else if(op == "U"){
+                      int t1 = 0;
+                      if(i + 1 < operators.size()){
+                          if(key_operator[operators[i+1]] == "NOT"){
+                              assert(partsInd < parts.size());
+                              t1 = (1 - parts[partsInd]->evaluate());
+                              partsInd++;
+                              i++;
+                          } else {
+                              assert(partsInd < parts.size());
+                              t1 = parts[partsInd]->evaluate();
+                              partsInd++;
+                              i++;
+                          }
+
+                          if(uRes.size() > uInd){
+                              if(uRes[uInd] == 1) {
+                                  truth = 1;
+                              } else if(uRes[uInd] == -1) {
+                                  truth = 0;
+                              }
+                          } else {
+                              if(!truth && !t1){
+                                  uRes.push_back(-1);
+                                  uInd++;
+                                  truth = 0;
+                              }
+                              if(t1){
+                                  uRes.push_back(1);
+                                  uInd++;
+                                  truth = 1;
+                              }
+                          }
+                      }
+              }
             }
                 // Reset per-step indices after each evaluation call.
-                xInd = fInd = gInd = 0;
+                xInd = fInd = gInd = uInd = 0;
                 return truth;  
       } 
       return 0;
