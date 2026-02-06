@@ -193,7 +193,7 @@ On these 57 cases (validation enabled):
 
 - Locality planner successes: 57 / 57 (all 57 validated).
 - Automata baseline successes: 57 / 57 (all 57 validated).
-- Brute-force successes: 41 / 57 (41 validated, 16 timeouts).
+- Brute-force successes: 47 / 57 (47 validated, 10 timeouts).
 
 These counts come directly from `tests_systematic/benchmark.csv`.
 Here, “success” means the planner exited with status `0` within the configured
@@ -201,9 +201,9 @@ timeout. With `--validate`, all successful outputs are also checked by
 `./validate`.
 
 Runtime summary (successful runs only):
-- Locality planner: mean 0.011s, median 0.01s, max 0.04s.
-- Automata baseline: mean 1.55s, median 0.01s, max 21.32s.
-- Brute force: mean 1.84s, median 0.01s, max 29.19s.
+- Locality planner: mean 0.001s, median 0.00s, max 0.01s.
+- Automata baseline: mean 1.26s, median 0.01s, max 22.89s.
+- Brute force: mean 2.90s, median 0.02s, max 27.66s.
 
 ![Benchmark Runtime vs n](tests_systematic/benchmark-time-vs-n.png)
 ![Benchmark Runtime per Case](tests_systematic/benchmark-time-vs-case.png)
