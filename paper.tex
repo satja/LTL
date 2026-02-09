@@ -557,6 +557,7 @@ As depicted in Figure \ref{f2}, we expand the previous example by introducing ch
 \cup \{\ G\ \neg congestion\}\ \cup \{FG\ \neg lowBattery \}.
 \end{split}
 \end{multline}
+The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false and $charged_i$ is false for all $i$.
 We update the actions so that \begin{equation}\gamma^{-}(c_i,lowBattery) = \gamma^{+}(c_i, charged_i) = \top.\end{equation} Major repair work will include fixing traffic light $4$, thus $\gamma^{+}(f_4,lowBattery)  = \top$. Actions $f_i, g_i, h_i$ can be performed only if the battery is not low: 
 \begin{multline}
 \begin{split}
