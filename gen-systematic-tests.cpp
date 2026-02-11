@@ -18,19 +18,17 @@ struct Config {
     unsigned int seed = 20260127u;
 };
 
+enum class Family {
+    Ex1Traffic = 0,
+    Ex2Chargers = 1,
+    Ex3Narrow2D = 2
+};
+
 static bool starts_with(const std::string& s, const std::string& prefix) {
     return s.rfind(prefix, 0) == 0;
 }
 
 static Config parse_args(int argc, char** argv) {
-    /*
-    CLI flags:
-    - --dir DIR: output directory for generated cases and manifest.txt.
-    - --n-min N: smallest problem size n to generate.
-    - --n-max N: largest problem size n to generate.
-    - --per-n K: number of cases per n (must be positive).
-    - --seed S: RNG seed for reproducibility.
-    */
     Config cfg;
     for (int i = 1; i < argc; i++) {
         const std::string arg = argv[i];
@@ -90,40 +88,72 @@ static std::string join_truths(const std::vector<int>& vals) {
     return oss.str();
 }
 
-static void write_case(const fs::path& out_path,
-                       int n,
-                       const std::vector<int>& on_vals,
-                       const std::vector<int>& broken_vals) {
+static std::vector<int> make_pattern(int n, int pattern_id) {
+    std::vector<int> indices;
+    if (pattern_id == 0) {
+        return indices;  // optional trivial pattern
+    }
+    if (pattern_id == 1) {
+        indices.push_back(std::max(1, n / 2));
+        return indices;
+    }
+    if (pattern_id == 2) {
+        indices.push_back(std::max(2, n / 3));
+        indices.push_back(std::min(n - 1, (2 * n) / 3));
+        if (indices[0] == indices[1]) indices.pop_back();
+        return indices;
+    }
+    const int k = std::min(1 + pattern_id, std::max(1, n / 6));
+    int step = std::max(2, n / (k + 1));
+    int pos = step;
+    for (int i = 0; i < k; i++) {
+        indices.push_back(std::min(n - 1, pos));
+        pos += step;
+    }
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    std::vector<int> filtered;
+    for (int idx : indices) {
+        if (!filtered.empty() && std::abs(filtered.back() - idx) == 1) continue;
+        filtered.push_back(std::clamp(idx, 1, n));
+    }
+    return filtered;
+}
+
+static void write_case_ex1(const fs::path& out_path,
+                           int n,
+                           const std::vector<int>& broken_indices) {
     std::ofstream out(out_path);
     if (!out) {
         std::cerr << "Failed to open " << out_path << " for writing\n";
         std::exit(1);
     }
 
-    // Line 1: local propositions.
+    std::vector<int> on_vals(n, 1), broken_vals(n, 0);
+    for (int idx : broken_indices) {
+        on_vals[idx - 1] = 0;
+        broken_vals[idx - 1] = 1;
+    }
+
     std::vector<std::string> locals;
     locals.reserve(2 * n);
     for (int i = 1; i <= n; i++) locals.push_back("on" + std::to_string(i));
     for (int i = 1; i <= n; i++) locals.push_back("broken" + std::to_string(i));
     out << join_csv(locals) << "\n";
-
-    // Line 2: global propositions.
     out << "congestion\n";
 
-    // Line 3: initial local truths (on first, then broken).
     std::vector<int> local_vals;
     local_vals.reserve(2 * n);
     local_vals.insert(local_vals.end(), on_vals.begin(), on_vals.end());
     local_vals.insert(local_vals.end(), broken_vals.begin(), broken_vals.end());
     out << join_truths(local_vals) << "\n";
-
-    // Line 4: initial global truths.
     out << "FALSE\n";
 
-    // gamma^- and gamma^+ from the paper's traffic-light example.
     for (int i = 2; i <= n - 1; i++) {
-        const std::string cond_or = "NOT (on" + std::to_string(i - 1) + ") OR (NOT (on" + std::to_string(i + 1) + "))";
-        const std::string cond_and = "NOT (on" + std::to_string(i - 1) + ") AND (NOT (on" + std::to_string(i + 1) + "))";
+        const std::string cond_or =
+            "NOT (on" + std::to_string(i - 1) + ") OR (NOT (on" + std::to_string(i + 1) + "))";
+        const std::string cond_and =
+            "NOT (on" + std::to_string(i - 1) + ") AND (NOT (on" + std::to_string(i + 1) + "))";
         out << "- f" << i << " broken" << i << " : " << cond_or << "\n";
         out << "+ f" << i << " on" << i << " : " << cond_or << "\n";
         out << "+ f" << i << " congestion : " << cond_and << "\n";
@@ -136,107 +166,196 @@ static void write_case(const fs::path& out_path,
     for (int i = 1; i <= n; i++) out << "- g" << i << " on" << i << " : TRUE\n";
     for (int i = 1; i <= n; i++) out << "+ h" << i << " on" << i << " : NOT (broken" << i << ")\n";
 
-    // Values: FG(on_i) for all i, and G(not congestion).
     for (int i = 1; i <= n; i++) out << "l : ( FG (on" << i << "))\n";
     out << "g : ( G ( NOT (congestion)))\n";
 }
 
-// Deterministic, non-adjacent broken patterns of increasing difficulty.
-static std::vector<int> make_pattern(int n, int pattern_id) {
-    std::vector<int> broken_indices;
-    if (pattern_id == 0) {
-        return broken_indices;  // no broken lights
+static void write_case_ex2(const fs::path& out_path,
+                           int n,
+                           const std::vector<int>& broken_indices) {
+    std::ofstream out(out_path);
+    if (!out) {
+        std::cerr << "Failed to open " << out_path << " for writing\n";
+        std::exit(1);
     }
-    if (pattern_id == 1) {
-        broken_indices.push_back(n / 2);
-        return broken_indices;
-    }
-    if (pattern_id == 2) {
-        broken_indices.push_back(std::max(2, n / 3));
-        broken_indices.push_back(std::min(n - 1, (2 * n) / 3));
-        if (broken_indices[0] == broken_indices[1]) broken_indices.pop_back();
-        return broken_indices;
-    }
-    // pattern_id >= 3: spaced-out multi-break pattern.
-    const int k = std::min(1 + pattern_id, std::max(1, n / 6));
-    int step = std::max(2, n / (k + 1));
-    int pos = step;
-    for (int i = 0; i < k; i++) {
-        broken_indices.push_back(std::min(n - 1, pos));
-        pos += step;
-    }
-    // Ensure non-adjacent and sorted/unique.
-    std::sort(broken_indices.begin(), broken_indices.end());
-    broken_indices.erase(std::unique(broken_indices.begin(), broken_indices.end()), broken_indices.end());
-    std::vector<int> filtered;
+
+    std::vector<int> on_vals(n, 1), broken_vals(n, 0), charged_vals(n, 0);
     for (int idx : broken_indices) {
-        if (!filtered.empty() && std::abs(filtered.back() - idx) == 1) continue;
-        filtered.push_back(std::clamp(idx, 1, n));
+        on_vals[idx - 1] = 0;
+        broken_vals[idx - 1] = 1;
     }
-    return filtered;
+
+    std::vector<std::string> locals;
+    locals.reserve(3 * n);
+    for (int i = 1; i <= n; i++) locals.push_back("on" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("broken" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("charged" + std::to_string(i));
+    out << join_csv(locals) << "\n";
+    out << "congestion\n";
+
+    std::vector<int> local_vals;
+    local_vals.reserve(3 * n);
+    local_vals.insert(local_vals.end(), on_vals.begin(), on_vals.end());
+    local_vals.insert(local_vals.end(), broken_vals.begin(), broken_vals.end());
+    local_vals.insert(local_vals.end(), charged_vals.begin(), charged_vals.end());
+    out << join_truths(local_vals) << "\n";
+    out << "FALSE\n";
+
+    for (int i = 2; i <= n - 1; i++) {
+        const std::string cond_or =
+            "NOT (on" + std::to_string(i - 1) + ") OR (NOT (on" + std::to_string(i + 1) + "))";
+        const std::string cond_and =
+            "NOT (on" + std::to_string(i - 1) + ") AND (NOT (on" + std::to_string(i + 1) + "))";
+        out << "- f" << i << " broken" << i << " : " << cond_or << "\n";
+        out << "+ f" << i << " on" << i << " : " << cond_or << "\n";
+        out << "+ f" << i << " congestion : " << cond_and << "\n";
+    }
+    out << "- f1 broken1 : TRUE\n";
+    out << "- f" << n << " broken" << n << " : TRUE\n";
+    out << "+ f1 on1 : TRUE\n";
+    out << "+ f" << n << " on" << n << " : TRUE\n";
+
+    for (int i = 1; i <= n; i++) out << "- g" << i << " on" << i << " : TRUE\n";
+    for (int i = 1; i <= n; i++) out << "+ h" << i << " on" << i << " : NOT (broken" << i << ")\n";
+
+    for (int i = 1; i <= n; i++) {
+        out << "+ c" << i << " charged" << i << " : TRUE\n";
+    }
+
+    for (int i = 1; i <= n; i++) out << "l : ( FG (on" << i << "))\n";
+    const int heavy = std::clamp(4, 1, n);
+    out << "l : ( FG (charged" << heavy << "))\n";
+    out << "g : ( G ( NOT (congestion)))\n";
+}
+
+static std::vector<int> make_service_indices(int n, int pattern_id) {
+    std::vector<int> service = make_pattern(n, pattern_id + 1);
+    if (service.empty()) service.push_back(std::max(1, n / 2));
+    if (service.back() != n) service.push_back(n);
+    std::sort(service.begin(), service.end());
+    service.erase(std::unique(service.begin(), service.end()), service.end());
+    return service;
+}
+
+static void write_case_ex3(const fs::path& out_path,
+                           int n,
+                           const std::vector<int>& service_indices) {
+    std::ofstream out(out_path);
+    if (!out) {
+        std::cerr << "Failed to open " << out_path << " for writing\n";
+        std::exit(1);
+    }
+
+    std::vector<std::string> locals;
+    locals.reserve(3 * n);
+    for (int i = 1; i <= n; i++) locals.push_back("ra" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("rb" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("done" + std::to_string(i));
+    out << join_csv(locals) << "\n";
+    out << "collision\n";
+
+    std::vector<int> ra(n, 0), rb(n, 0), done(n, 0);
+    ra[0] = 1;
+
+    std::vector<int> local_vals;
+    local_vals.reserve(3 * n);
+    local_vals.insert(local_vals.end(), ra.begin(), ra.end());
+    local_vals.insert(local_vals.end(), rb.begin(), rb.end());
+    local_vals.insert(local_vals.end(), done.begin(), done.end());
+    out << join_truths(local_vals) << "\n";
+    out << "FALSE\n";
+
+    for (int i = 1; i <= n - 1; i++) {
+        out << "- mA" << i << " ra" << i << " : TRUE\n";
+        out << "+ mA" << i << " ra" << (i + 1) << " : TRUE\n";
+
+        out << "- mB" << i << " rb" << i << " : TRUE\n";
+        out << "+ mB" << i << " rb" << (i + 1) << " : TRUE\n";
+    }
+
+    for (int i = 1; i <= n; i++) {
+        out << "- sAB" << i << " ra" << i << " : TRUE\n";
+        out << "+ sAB" << i << " rb" << i << " : TRUE\n";
+
+        out << "- sBA" << i << " rb" << i << " : TRUE\n";
+        out << "+ sBA" << i << " ra" << i << " : TRUE\n";
+
+        out << "+ repA" << i << " done" << i << " : ra" << i << "\n";
+        out << "+ repB" << i << " done" << i << " : rb" << i << "\n";
+    }
+
+    for (int idx : service_indices) out << "l : ( FG (done" << idx << "))\n";
+    out << "l : ( FG (rb" << n << "))\n";
+    out << "g : ( G ( NOT (collision)))\n";
+}
+
+static std::string family_tag(Family f) {
+    if (f == Family::Ex1Traffic) return "ex1";
+    if (f == Family::Ex2Chargers) return "ex2";
+    return "ex3";
 }
 
 int main(int argc, char** argv) {
     const Config cfg = parse_args(argc, argv);
     fs::create_directories(cfg.dir);
 
-    // Reset directory contents for reproducibility.
     for (const auto& entry : fs::directory_iterator(cfg.dir)) {
         fs::remove(entry.path());
     }
 
     std::mt19937 rng(cfg.seed);
-
     std::ofstream manifest(cfg.dir / "manifest.txt");
     manifest << "seed=" << cfg.seed << " per_n=" << cfg.per_n
-             << " n_min=" << cfg.n_min << " n_max=" << cfg.n_max << "\n";
+             << " n_min=" << cfg.n_min << " n_max=" << cfg.n_max
+             << " families=ex1,ex2,ex3\n";
 
     int case_id = 0;
     for (int n = cfg.n_min; n <= cfg.n_max; n++) {
         for (int j = 0; j < cfg.per_n; j++) {
-            const int pattern_id = j % std::max(1, cfg.per_n);
-            std::vector<int> broken_indices = make_pattern(n, pattern_id);
+            const Family fam = static_cast<Family>(j % 3);
+            const int variant = j / 3;
+            int pattern_id = variant + 1;  // avoid all-trivial cases by default
 
-            // Small randomized perturbation: swap one broken index with a nearby
-            // non-adjacent alternative when possible, to diversify cases.
-            if (!broken_indices.empty() && n >= 8) {
-                std::uniform_int_distribution<int> pick(0, static_cast<int>(broken_indices.size()) - 1);
-                int idx_i = pick(rng);
-                int cur = broken_indices[idx_i];
+            std::vector<int> indices = make_pattern(n, pattern_id);
+            if (!indices.empty() && n >= 8 && fam != Family::Ex3Narrow2D) {
+                // Small deterministic perturbation for diversity.
+                std::uniform_int_distribution<int> pick(0, static_cast<int>(indices.size()) - 1);
+                const int idx_i = pick(rng);
+                const int cur = indices[idx_i];
                 std::uniform_int_distribution<int> delta_dist(-2, 2);
-                int candidate = std::clamp(cur + delta_dist(rng), 1, n);
+                const int candidate = std::clamp(cur + delta_dist(rng), 1, n);
                 bool ok = true;
-                for (int b : broken_indices) {
+                for (int b : indices) {
                     if (b == cur) continue;
                     if (std::abs(b - candidate) <= 1) {
                         ok = false;
                         break;
                     }
                 }
-                if (ok) broken_indices[idx_i] = candidate;
+                if (ok) indices[idx_i] = candidate;
+            }
+            std::sort(indices.begin(), indices.end());
+            indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+
+            const std::string fname = "case-" + std::to_string(case_id) + "-" + family_tag(fam) + ".input-only.txt";
+            const fs::path out_path = cfg.dir / fname;
+
+            if (fam == Family::Ex1Traffic) {
+                write_case_ex1(out_path, n, indices);
+            } else if (fam == Family::Ex2Chargers) {
+                write_case_ex2(out_path, n, indices);
+            } else {
+                std::vector<int> service = make_service_indices(n, pattern_id);
+                write_case_ex3(out_path, n, service);
+                indices = service;  // record service indices in manifest "broken=" field
             }
 
-            std::sort(broken_indices.begin(), broken_indices.end());
-            broken_indices.erase(std::unique(broken_indices.begin(), broken_indices.end()), broken_indices.end());
-
-            std::vector<int> on_vals(n, 1);
-            std::vector<int> broken_vals(n, 0);
-            for (int idx : broken_indices) {
-                const int i = idx - 1;
-                broken_vals[i] = 1;
-                on_vals[i] = 0;
-            }
-
-            const std::string filename = "case-" + std::to_string(case_id) + ".input-only.txt";
-            const fs::path out_path = cfg.dir / filename;
-            write_case(out_path, n, on_vals, broken_vals);
-
-            manifest << filename << " n=" << n << " broken=";
-            for (size_t i = 0; i < broken_indices.size(); i++) {
+            manifest << fname << " n=" << n << " broken=";
+            for (size_t i = 0; i < indices.size(); i++) {
                 if (i) manifest << ",";
-                manifest << broken_indices[i];
+                manifest << indices[i];
             }
-            manifest << " pattern=" << pattern_id << "\n";
+            manifest << "\n";
 
             case_id++;
         }

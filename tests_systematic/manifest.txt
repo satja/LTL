@@ -1,58 +1,58 @@
-seed=2026 per_n=3 n_min=6 n_max=24
-case-0.input-only.txt n=6 broken= pattern=0
-case-1.input-only.txt n=6 broken=3 pattern=1
-case-2.input-only.txt n=6 broken=2,4 pattern=2
-case-3.input-only.txt n=7 broken= pattern=0
-case-4.input-only.txt n=7 broken=3 pattern=1
-case-5.input-only.txt n=7 broken=2,4 pattern=2
-case-6.input-only.txt n=8 broken= pattern=0
-case-7.input-only.txt n=8 broken=5 pattern=1
-case-8.input-only.txt n=8 broken=2,5 pattern=2
-case-9.input-only.txt n=9 broken= pattern=0
-case-10.input-only.txt n=9 broken=6 pattern=1
-case-11.input-only.txt n=9 broken=4,6 pattern=2
-case-12.input-only.txt n=10 broken= pattern=0
-case-13.input-only.txt n=10 broken=3 pattern=1
-case-14.input-only.txt n=10 broken=3,7 pattern=2
-case-15.input-only.txt n=11 broken= pattern=0
-case-16.input-only.txt n=11 broken=6 pattern=1
-case-17.input-only.txt n=11 broken=3,6 pattern=2
-case-18.input-only.txt n=12 broken= pattern=0
-case-19.input-only.txt n=12 broken=4 pattern=1
-case-20.input-only.txt n=12 broken=4,9 pattern=2
-case-21.input-only.txt n=13 broken= pattern=0
-case-22.input-only.txt n=13 broken=7 pattern=1
-case-23.input-only.txt n=13 broken=5,8 pattern=2
-case-24.input-only.txt n=14 broken= pattern=0
-case-25.input-only.txt n=14 broken=7 pattern=1
-case-26.input-only.txt n=14 broken=4,11 pattern=2
-case-27.input-only.txt n=15 broken= pattern=0
-case-28.input-only.txt n=15 broken=9 pattern=1
-case-29.input-only.txt n=15 broken=7,10 pattern=2
-case-30.input-only.txt n=16 broken= pattern=0
-case-31.input-only.txt n=16 broken=6 pattern=1
-case-32.input-only.txt n=16 broken=4,10 pattern=2
-case-33.input-only.txt n=17 broken= pattern=0
-case-34.input-only.txt n=17 broken=7 pattern=1
-case-35.input-only.txt n=17 broken=5,9 pattern=2
-case-36.input-only.txt n=18 broken= pattern=0
-case-37.input-only.txt n=18 broken=7 pattern=1
-case-38.input-only.txt n=18 broken=4,12 pattern=2
-case-39.input-only.txt n=19 broken= pattern=0
-case-40.input-only.txt n=19 broken=7 pattern=1
-case-41.input-only.txt n=19 broken=6,14 pattern=2
-case-42.input-only.txt n=20 broken= pattern=0
-case-43.input-only.txt n=20 broken=12 pattern=1
-case-44.input-only.txt n=20 broken=6,15 pattern=2
-case-45.input-only.txt n=21 broken= pattern=0
-case-46.input-only.txt n=21 broken=11 pattern=1
-case-47.input-only.txt n=21 broken=7,14 pattern=2
-case-48.input-only.txt n=22 broken= pattern=0
-case-49.input-only.txt n=22 broken=9 pattern=1
-case-50.input-only.txt n=22 broken=7,16 pattern=2
-case-51.input-only.txt n=23 broken= pattern=0
-case-52.input-only.txt n=23 broken=12 pattern=1
-case-53.input-only.txt n=23 broken=7,16 pattern=2
-case-54.input-only.txt n=24 broken= pattern=0
-case-55.input-only.txt n=24 broken=12 pattern=1
-case-56.input-only.txt n=24 broken=6,16 pattern=2
+seed=2026 per_n=3 n_min=6 n_max=24 families=ex1,ex2,ex3
+case-0-ex1.input-only.txt n=6 broken=3
+case-1-ex2.input-only.txt n=6 broken=3
+case-2-ex3.input-only.txt n=6 broken=2,4,6
+case-3-ex1.input-only.txt n=7 broken=3
+case-4-ex2.input-only.txt n=7 broken=3
+case-5-ex3.input-only.txt n=7 broken=2,4,7
+case-6-ex1.input-only.txt n=8 broken=5
+case-7-ex2.input-only.txt n=8 broken=6
+case-8-ex3.input-only.txt n=8 broken=2,5,8
+case-9-ex1.input-only.txt n=9 broken=6
+case-10-ex2.input-only.txt n=9 broken=5
+case-11-ex3.input-only.txt n=9 broken=3,6,9
+case-12-ex1.input-only.txt n=10 broken=3
+case-13-ex2.input-only.txt n=10 broken=6
+case-14-ex3.input-only.txt n=10 broken=3,6,10
+case-15-ex1.input-only.txt n=11 broken=6
+case-16-ex2.input-only.txt n=11 broken=4
+case-17-ex3.input-only.txt n=11 broken=3,7,11
+case-18-ex1.input-only.txt n=12 broken=4
+case-19-ex2.input-only.txt n=12 broken=7
+case-20-ex3.input-only.txt n=12 broken=4,8,12
+case-21-ex1.input-only.txt n=13 broken=7
+case-22-ex2.input-only.txt n=13 broken=7
+case-23-ex3.input-only.txt n=13 broken=4,8,13
+case-24-ex1.input-only.txt n=14 broken=7
+case-25-ex2.input-only.txt n=14 broken=9
+case-26-ex3.input-only.txt n=14 broken=4,9,14
+case-27-ex1.input-only.txt n=15 broken=9
+case-28-ex2.input-only.txt n=15 broken=9
+case-29-ex3.input-only.txt n=15 broken=5,10,15
+case-30-ex1.input-only.txt n=16 broken=6
+case-31-ex2.input-only.txt n=16 broken=7
+case-32-ex3.input-only.txt n=16 broken=5,10,16
+case-33-ex1.input-only.txt n=17 broken=7
+case-34-ex2.input-only.txt n=17 broken=6
+case-35-ex3.input-only.txt n=17 broken=5,11,17
+case-36-ex1.input-only.txt n=18 broken=7
+case-37-ex2.input-only.txt n=18 broken=7
+case-38-ex3.input-only.txt n=18 broken=6,12,18
+case-39-ex1.input-only.txt n=19 broken=7
+case-40-ex2.input-only.txt n=19 broken=11
+case-41-ex3.input-only.txt n=19 broken=6,12,19
+case-42-ex1.input-only.txt n=20 broken=12
+case-43-ex2.input-only.txt n=20 broken=12
+case-44-ex3.input-only.txt n=20 broken=6,13,20
+case-45-ex1.input-only.txt n=21 broken=11
+case-46-ex2.input-only.txt n=21 broken=10
+case-47-ex3.input-only.txt n=21 broken=7,14,21
+case-48-ex1.input-only.txt n=22 broken=9
+case-49-ex2.input-only.txt n=22 broken=13
+case-50-ex3.input-only.txt n=22 broken=7,14,22
+case-51-ex1.input-only.txt n=23 broken=12
+case-52-ex2.input-only.txt n=23 broken=12
+case-53-ex3.input-only.txt n=23 broken=7,15,23
+case-54-ex1.input-only.txt n=24 broken=12
+case-55-ex2.input-only.txt n=24 broken=10
+case-56-ex3.input-only.txt n=24 broken=8,16,24
