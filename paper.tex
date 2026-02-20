@@ -188,8 +188,8 @@ according to the corresponding preconditions. Formally, we define {\it action th
 where $\mathcal{L}_{PL}$ is the propositional logic fragment of $LTL_f$.
 These functions represent preconditions for the actions. Namely,
 after action $a$, proposition $p$ becomes true if the precondition $\gamma^+(a, p)$ is true,
-and false if the precondition $\gamma^-(a, p)$ is true. However, if neither or both preconditions are true,
-the truth value of $p$ will not change after action $a$. These rules will be formalized in Eq. \eqref{h}.
+and false if the precondition $\gamma^-(a, p)$ is true. These rules will be formalized in Eq. \eqref{h}.
+%However, if neither or both preconditions are true, the truth value of $p$ will not change after action $a$.
 
 A sequence of actions $\pi = (a_1, \dots, a_k)$ is called {\it action plan}.
 
@@ -239,7 +239,7 @@ If there is no such action plan, some values have to be broken, so tradeoffs bet
 
 \subsection{Locality-Based Moral Conflict}\label{aa}
 
-Our contribution lies in restricting CONFLICT to a polynomially solvable variant using additional assumptions that reduce its generality without sacrificing too much of its practical use. Motivated from various real-world examples concerning planning in what is essentially a 1D or 2D space (roads, warehouses), such as the example in Sect. \ref{ex1}, we assume that most propositions -- all except for a constant number of them -- are localized. Formally, we introduce locality as the mapping 
+Our contribution lies in restricting CONFLICT to a polynomially solvable variant using additional assumptions that reduce its generality without sacrificing too much of its practical use. Motivated from various real-world examples concerning planning in what is essentially a 1D or 2D space (roads, warehouses), such as the examples in Sect. \ref{example}, we assume that most propositions -- all except for a constant number of them -- are localized. Formally, we introduce locality as the mapping 
 \begin{equation}
     loc: Prop \to \{0,1, \dots, n\},\  
 \end{equation}
@@ -459,7 +459,7 @@ The computational complexity of the locality-based CONFLICT is: $O(n(|Act|+|\Ome
 
 Because of the large constant factor (simplified to $O(2^{2^M})$ for $K,L=O(M)$), the theoretical strength of this results depends on how small the constants are, which reveals a tradeoff between efficiency and flexibility.  However, this worst-case constant will almost never be obtained in practice since the concerned cardinality of $\Theta$ (a local subset of $\Omega$) will usually be far less than the number of all possible propositional logic formulas.
 
-\section{Example}\label{example}
+\section{Examples}\label{example}
 
 \subsection{Traffic Lights}\label{ex1}
 
