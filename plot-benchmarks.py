@@ -8,7 +8,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import argparse
 import math
-import statistics
 from scipy.stats import mannwhitneyu
 
 # CLI flags:
@@ -178,7 +177,21 @@ plt.close(fig)
 
 print(f"Wrote {out3}")
 
-# ---- Plot 4: mean +/- std by n for all methods ----
+# ---- Plot 4: median with IQR by n for all methods ----
+def quantile(sorted_vals, q):
+    if not sorted_vals:
+        return float("nan")
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    pos = (len(sorted_vals) - 1) * q
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return sorted_vals[lo]
+    w = pos - lo
+    return sorted_vals[lo] * (1.0 - w) + sorted_vals[hi] * w
+
+
 def series_by_n(points, idx_time):
     buckets = defaultdict(list)
     for d in points:
@@ -186,42 +199,42 @@ def series_by_n(points, idx_time):
             continue
         buckets[d[1]].append(d[idx_time])
     xs = sorted(buckets.keys())
-    means = []
-    stds = []
+    medians = []
+    q25 = []
+    q75 = []
     for x in xs:
-        vals = buckets[x]
-        means.append(sum(vals) / len(vals))
-        stds.append(statistics.pstdev(vals) if len(vals) > 1 else 0.0)
-    return xs, means, stds
+        vals = sorted(buckets[x])
+        medians.append(quantile(vals, 0.5))
+        q25.append(quantile(vals, 0.25))
+        q75.append(quantile(vals, 0.75))
+    return xs, medians, q25, q75
 
 
-pxs, pmean, pstd = series_by_n(ok, 4)
-bxs, bmean, bstd = series_by_n(ok, 6)
-axs, amean, astd = series_by_n(ok, 8)
+pxs, pmed, pq25, pq75 = series_by_n(ok, 4)
+bxs, bmed, bq25, bq75 = series_by_n(ok, 6)
+axs, amed, aq25, aq75 = series_by_n(ok, 8)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 
-def draw_mean_std(xs, mean, std, label, color):
+def draw_median_iqr(xs, median, q25, q75, label, color):
     if not xs:
         return
-    upper = [m + s for m, s in zip(mean, std)]
-    lower = [max(0.0, m - s) for m, s in zip(mean, std)]
-    ax.plot(xs, mean, linewidth=2.2, color=color, label=label)
-    ax.plot(xs, upper, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
-    ax.plot(xs, lower, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
-    ax.fill_between(xs, lower, upper, color=color, alpha=0.12)
+    ax.plot(xs, median, linewidth=2.2, color=color, label=label)
+    ax.plot(xs, q75, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
+    ax.plot(xs, q25, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
+    ax.fill_between(xs, q25, q75, color=color, alpha=0.12)
 
-draw_mean_std(pxs, pmean, pstd, "locality (mean ± std)", "#1f77b4")
-draw_mean_std(bxs, bmean, bstd, "bruteforce (mean ± std)", "#d62728")
-draw_mean_std(axs, amean, astd, "automata (mean ± std)", "#2ca02c")
+draw_median_iqr(pxs, pmed, pq25, pq75, "locality (median, IQR)", "#1f77b4")
+draw_median_iqr(bxs, bmed, bq25, bq75, "bruteforce (median, IQR)", "#d62728")
+draw_median_iqr(axs, amed, aq25, aq75, "automata (median, IQR)", "#2ca02c")
 
-ax.set_title("Mean Runtime by n with Standard Deviation Bands")
+ax.set_title("Median Runtime by n with IQR Bands")
 ax.set_xlabel("n (number of intersections)")
 ax.set_ylabel("time (seconds)")
 ax.grid(True, alpha=0.3)
 ax.legend()
 
-out4 = OUT_DIR / "benchmark-time-mean-std-vs-n.png"
+out4 = OUT_DIR / "benchmark-time-median-iqr-vs-n.png"
 fig.tight_layout()
 fig.savefig(out4, dpi=160)
 plt.close(fig)
