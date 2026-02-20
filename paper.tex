@@ -140,7 +140,7 @@ A set of moral values $\Omega$ consists of LTL formulas \cite{4567924} that desc
 
 
 Grandi et al. \cite{grandi2022logic} have shown that several planning tasks are intractable (PSPACE-complete). Namely, CONFLICT is shown to be PSPACE-complete using reduction from the propositional STRIPS planning problem called PLANSAT \cite{BYLANDER1994165}. The difficulty of the problem arises from the exponential number of possible plans.
-Using additional assumptions at the cost of generality, we define a constrained version of the CONFLICT problem and present the algorithm to solve it. Namely, to enable polynomial complexity, we restrict actions to affect only a local set of propositions, introducting the {\it locality} assumption. 
+Using additional assumptions at the cost of generality, we define a constrained version of the CONFLICT problem and present the algorithm to solve it. Namely, to enable polynomial complexity, we restrict actions to affect only a local set of propositions, introducing the {\it locality} assumption. 
 
 The proposed framework allows modelling many real-world scenarios involving planning. One example includes utilizing propositions to express properties involving linear space order. Many robots involved in repairs or manufacturing adhere to such constraints (e.g. robots used to pick and pack food in the factories, gantry robots used in automotive industry, robots dispatching pallets in the warehouses, robots in electronic chip manufacturing or pharmaceutical production). Utilizing proposed logic, these robots could move back and forth satisfying expressive, complex constraints. One important constraint is not to harm human workers that might cross the path of the traversing robots. This shows the importance of having the possibility to add moral constraints in the planning process  to create safe, flexible and efficient robots.    
 To complement the theoretical analysis, we perform an empirical comparison against brute-force and automata/progression baselines on systematic instances derived from the three examples in this paper.
@@ -171,7 +171,7 @@ The world is described by atomic propositions $Prop=\{p_1, \dots, p_n\}$.
 Their Boolean truth values are represented as a state $s\in 2^{Prop}$ which
 consists of all propositions that are true at a given moment.
 
-Linear Temporal Logic over Finite Traces, noted as \( LTL_{f} \), is a temporal logic used to represent an agent's values and goals over finite traces. \( LTL_{f} \) includes the operators from classical linear temporal logic such as "next" (\( X \)) and "until" (\( U \)), allowing for expressions about the progression of time and the satisfaction of certain conditions. Additionally, the standard operators "henceforth" (\( G \)) and "eventually" (\( F \)) are defined as \( G\varphi := \neg(\top U \varphi) \) and \( F\varphi := \neg G \neg \varphi \). Formally, the grammar of \( LTL_{f} \) is defined as follows ($p\in Prop$):
+Linear Temporal Logic over Finite Traces, noted as \( LTL_{f} \), is a temporal logic used to represent an agent's values and goals over finite traces. \( LTL_{f} \) includes the operators from classical linear temporal logic such as "next" (\( X \)) and "until" (\( U \)), allowing for expressions about the progression of time and the satisfaction of certain conditions. Additionally, the standard operators "henceforth" (\( G \)) and "eventually" (\( F \)) are defined as \( G\varphi := \neg(\top U \neg \varphi) \) and \( F\varphi := \top U \varphi \). Formally, the grammar of \( LTL_{f} \) is defined as follows ($p\in Prop$):
 \begin{equation}
     \varphi ::= p \mid \neg \varphi \mid \varphi_1 \land \varphi_2 \mid X \varphi \mid \varphi_1 U \varphi_2 \mid G \varphi \mid F \varphi.
 \end{equation}
@@ -288,8 +288,8 @@ The basic idea stems from the temporal constraint:
 that if action \( a \) uses/changes \( p_i \),
 this action precedes all actions \( b \) such that \( r(b) \geq i + 2L \).
 Thus, while performing an action plan, we do not need to keep track of "distant" propositions.
-We only need to keep track of the truth values of the current $2L$-lenght interval of 
-interval of local propositions (called {\it mutable})
+We only need to keep track of the truth values of the current $2L$-length interval of
+local propositions (called {\it mutable})
 and move it left-to-right, along with the global propositions.
 The algorithm searches for a path over these substates and the number of such substates is linear in $n$. 
 
@@ -402,6 +402,7 @@ A vertex in $\mathcal{G}$ is {\bf final} if it corresponds to a substate $S=(i, 
   \caption{Illustration of a path in the graph of substates.
     The index of a proposition represents its location ($l(p_i)=i$)}
   \label{fig:wide-svg}
+  \Description{A schematic of the substate graph with layers by interval index and directed edges representing action applications and right-shift transitions.}
 \end{figure*}
 
 \begin{algorithm}[ht!]
@@ -410,26 +411,19 @@ A vertex in $\mathcal{G}$ is {\bf final} if it corresponds to a substate $S=(i, 
 \begin{algorithmic}[1]
 \Require $Prop, loc, Act, \Omega, \gamma, s_0, L$  
 \Ensure $\pi$ \Comment{Returns a satisfying action plan $\pi$ or False if it does not exist.}
-\State push($S_0$) \Comment{Push the initial substate $S_0$ to the stack.}
+\State push(($S_0$, list())) \Comment{Stack stores (state, action-prefix).}
 \While{stack is not empty}
-\State $S$ := pop() \Comment{Take a substate from the stack.}
+\State $(S, \pi)$ := pop() \Comment{Take one search node from the stack.}
 \If{visited($S$) or not valid($S$)} \State continue; \EndIf
+\State visited($S$) $:=$ True
 \If{final($S$)} 
-\State $\pi :=$ list() \Comment{Initialize empty list.}
-\State $S_0, S_1, \dots, S$ := stack \Comment{Read stack bottom-up.}
-\For{$j=0,1,\dots$} 
-\If{$a\in Act$ changes $S_j$ to $S_{j+1}$}
-\State $\pi$.append($a$) 
-\EndIf 
-\EndFor
 \Return $\pi$
 \EndIf
-\State visited($S$) $:=$ True
 \For{$a\in Act$} \If{$a$ changes $S$ to $S'$} 
-\State push($S'$)  \Comment{Type 1 edge.}
+\State push(($S'$, $\pi$ + [$a$]))  \Comment{Type 1 edge appends action.}
 \EndIf \EndFor
 \State Construct $S'$ from $S$ as in Def. \ref{g} (Type 2)
-\State push($S'$) %\COMMENT{Type-2 edge.}
+\State push(($S'$, $\pi$)) %\COMMENT{Type-2 edge keeps action-prefix.}
 \EndWhile \\
 \Return False
 \end{algorithmic}
@@ -455,7 +449,7 @@ with $loc(p)=i+1$, which means they are valid at that point (the action plan sat
 For the same reason, all propositions when $i=n-2L$ must be valid. Thus, the state is final. Figure \ref{fig:wide-svg} illustrates one potential path in a graph of substates.
 \end{proof}
 
-The computational complexity of the locality-based CONFLICT is: $O(n(|Act|+|\Omega|))$ for graph construction and $O(n^2)$ for a breath-first or depth-first search on a graph of substates. Thus, the locality-based CONFLICT is polynomial.
+The computational complexity of the locality-based CONFLICT is: $O(n(|Act|+|\Omega|))$ for graph construction and $O(n^2)$ for a breadth-first or depth-first search on a graph of substates. Thus, the locality-based CONFLICT is polynomial.
 
 Because of the large constant factor (simplified to $O(2^{2^M})$ for $K,L=O(M)$), the theoretical strength of this results depends on how small the constants are, which reveals a tradeoff between efficiency and flexibility.  However, this worst-case constant will almost never be obtained in practice since the concerned cardinality of $\Theta$ (a local subset of $\Omega$) will usually be far less than the number of all possible propositional logic formulas.
 
@@ -474,17 +468,18 @@ fix and turn on all the traffic lights without ever causing congestion. For each
 \gamma^-(g_i, on_i)=\top,\quad \gamma^+(h_i, on_i)=\neg broken_i,\quad \textrm{for } 1\le i\le n.
 \end{multline}
 
-\begin{figure}\label{f1}
+\begin{figure}
 \begin{center}
 \includegraphics[height=1.6cm]{figures/robot4.png}
 \caption{Example \ref{ex1}: Traffic lights 2, 4, and 5 are broken.}\label{f1}
+\Description{A linear road with ten numbered intersections and traffic lights above each intersection; lights 2, 4, and 5 are broken/off in the initial state.}
 \end{center}
 \end{figure}
 
 $\mathcal{M}=(\Omega,\gamma,s_0)$ is a locality-based moral conflict for $M=|Glob|=1$ and $L=3$ since
 each action concerns at most three consecutive local propositions. 
 $L=3$ also means that actions $f_i$, $g_i$ and $h_i$ can be performed after $f_{j}$, $g_{j}$ and $h_{j}$ for
-$j\le i+3$, but not not after $f_{i+4}$, $g_{i+4}$ and $h_{i+4}$. Thus, the order of fixing traffic lights is roughly similar to their order along the road, which is a natural constraint.
+$j\le i+3$, but not after $f_{i+4}$, $g_{i+4}$ and $h_{i+4}$. Thus, the order of fixing traffic lights is roughly similar to their order along the road, which is a natural constraint.
 
 For $n=10$ and the initial state $s_0=\{on_1, broken_2, on_3$, $broken_4, broken_5, on_6,$ $on_7, on_8, on_9, on_{10}\}$ as depicted
 in Figure \ref{f1}, $\mathcal{M}$ is not a moral conflict.
@@ -543,33 +538,29 @@ To fix light $5$, we turn off light $6$ using $g_6$ and then perform $f_5$ befor
 \includegraphics[height=1.6cm]{figures/robot5.png}
 \caption{Example \ref{ex2}: Traffic lights 2, 4, and 5 are broken, and there is a charger between each pair of lights. Fixing
 traffic light 4 drains the robot's battery.}\label{f2}
+\Description{The same ten-intersection traffic-light line, now with charging stations between neighboring intersections; lights 2, 4, and 5 are broken.}
 \end{center}
 \end{figure}
 
 As depicted in Figure \ref{f2}, we expand the previous example by introducing charging stations between each pair of traffic lights. The charging stations allow the robot to recharge its battery. However, we want to avoid wasting battery charging cycles when it is not necessary, so we will disallow charging until the battery runs low due to major repair work. We introduce an action $c_i$ that fully charges the robot at the charging station located in front of the traffic light with the index $i$. If a proposition $charged_i$ denotes that this charger has been used, the described condition can be written as $\neg charged_i\ U\ lowBattery$.
 
-\noindent Formally, we have: \begin{multline}
-\begin{split}
-&Loc = \cup_{i=1}^{n} \{on_i,\ broken_i, charged_i\},\ Glob = \{congestion, lowBattery\}, 
-\end{split}
-\\\begin{split}
-&\Omega = \{FG on_i, i = 1,\dots, n\}\ \cup \{\neg charged_i\ U\ lowBattery, i = 1,\dots, n\} 
-\cup \{\ G\ \neg congestion\}\ \cup \{FG\ \neg lowBattery \}.
-\end{split}
-\end{multline}
+\noindent Formally, we have:
+\begin{equation}
+\begin{aligned}
+Loc &= \bigcup_{i=1}^{n} \{on_i,\ broken_i, charged_i\},\quad Glob = \{congestion, lowBattery\}, \\
+\Omega &= \{FG on_i,\ i = 1,\dots, n\}\ \cup\ \{\neg charged_i\ U\ lowBattery,\ i = 1,\dots, n\} \\
+&\quad \cup\ \{G\neg congestion\}\ \cup\ \{FG\neg lowBattery\}.
+\end{aligned}
+\end{equation}
 The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false and $charged_i$ is false for all $i$.
-We update the actions so that \begin{equation}\gamma^{-}(c_i,lowBattery) = \gamma^{+}(c_i, charged_i) = \top.\end{equation} Major repair work will include fixing traffic light $4$, thus $\gamma^{+}(f_4,lowBattery)  = \top$. Actions $f_i, g_i, h_i$ can be performed only if the battery is not low: 
-\begin{multline}
-\begin{split}
-\gamma^-(f_i, broken_i)&=\gamma^+(f_i, on_i)=(\neg on_{i-1}\lor \neg on_{i+1})\ \wedge \neg lowBattery \quad \textrm{for } 1<i<n,
-\end{split}
-\\\begin{split}
-\gamma^-(f_i, broken_i)&=\gamma^+(f_i, on_i)=\neg lowBattery \quad \textrm{for } i\in\{1,n\},
-\end{split}
-\\\begin{split}
-\gamma^-(g_i, on_i)&=\neg lowBattery,\; \gamma^+(h_i, on_i)= \neg broken_i \wedge \neg lowBattery \quad \textrm{for } 1\le i\le n.
-\end{split}
-\end{multline}
+We update the actions so that \begin{equation}\gamma^{-}(c_i,lowBattery) = \gamma^{+}(c_i, charged_i) = \top.\end{equation} Major repair work will include fixing traffic light $4$, thus $\gamma^{+}(f_4,lowBattery)  = \top$. Actions $f_i, g_i, h_i$ can be performed only if the battery is not low:
+\begin{equation}
+\begin{aligned}
+\gamma^-(f_i, broken_i)&=\gamma^+(f_i, on_i)=(\neg on_{i-1}\lor \neg on_{i+1})\wedge \neg lowBattery &&\text{for } 1<i<n,\\
+\gamma^-(f_i, broken_i)&=\gamma^+(f_i, on_i)=\neg lowBattery &&\text{for } i\in\{1,n\},\\
+\gamma^-(g_i, on_i)&=\neg lowBattery,\quad \gamma^+(h_i, on_i)= \neg broken_i \wedge \neg lowBattery &&\text{for } 1\le i\le n.
+\end{aligned}
+\end{equation}
 
 Again, since each action affects at most three consecutive local propositions, we have $L = 3$. The algorithm finds the following path, ie, the sequence of substates: 
 
@@ -599,7 +590,7 @@ Again, since each action affects at most three consecutive local propositions, w
 \text{move } \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_6, on_7, on_8\},\ \{lowBattery\}\}, \cup_{i=1}^{8}\{\neg  charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{perform } c_4 \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, charged_5, broken_5, on_6, on_7, on_8\},\ \emptyset\}, \cup_{i=1}^{8}\{\neg charged_i \; U \;  lowBattery\})
+\text{perform } c_4 \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, charged_4, broken_5, on_6, on_7, on_8\},\ \emptyset\}, \cup_{i=1}^{8}\{\neg charged_i \; U \;  lowBattery\})
 \end{split}
 \\\begin{split}
 \text{move } \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_6, on_7, on_8, on_9\},\ \emptyset\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
@@ -620,7 +611,7 @@ Again, since each action affects at most three consecutive local propositions, w
 \normalsize
 
 The last substate is indeed final since $i=n-2L$ and all active propositions are valid in the sense of Definitions \ref{gval} and
-\ref{lval}. For example, $FGon_7$ and $FG\neg lowBattery$ are true, while $\neg charged_7 \; U\; lowBettery$ does belong
+\ref{lval}. For example, $FGon_7$ and $FG\neg lowBattery$ are true, while $\neg charged_7 \; U\; lowBattery$ does belong
 to $\Theta$. The validity of previous local propositions, such as $on_1$, has been verified as part of the "move" operation according
 to Definition \ref{g}, while the truth of $G \neg congestion$ was verified in each substate according to Definition \ref{invalid}.
 
@@ -630,6 +621,7 @@ to Definition \ref{g}, while the truth of $G \neg congestion$ was verified in ea
 \begin{center}
 \includegraphics[width=\textwidth]{figures/robot6.png}
 \caption{Example \ref{ex3}: A three-lane production corridor with required service cells at columns 3, 7, and 9 (middle lane), and occupied crossing cells at columns 4 and 8. The highlighted route shows a collision-free detour using lane changes.}\label{f-ex3}
+\Description{A three-lane corridor with 12 columns. The robot starts at column 1 in the middle lane, services columns 3, 7, and 9, and detours around occupied middle-lane cells at columns 4 and 8 via lane changes.}
 \end{center}
 \end{figure}
 
@@ -705,7 +697,7 @@ This section evaluates whether the theoretical locality advantage translates int
 
 All experiments were run on an Intel Core i7-10510U (4 cores / 8 threads) machine with 31\,GiB RAM, Ubuntu Linux kernel 5.15, and C++17 implementations compiled with \texttt{g++ 9.4.0} using optimization level \texttt{-O2}.
 
-The benchmark set consists of 190 systematically generated instances with problem size $n\in[6,24]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial damaged-location patterns chosen systematically for each size. Family assignment follows a fixed cyclic pattern over variants, yielding 76 instances from the linear traffic-light family (Example 1), 57 from the charging extension (Example 2), and 57 from the two-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
+The benchmark set consists of 190 systematically generated instances with problem size $n\in[6,24]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial damaged-location patterns chosen systematically for each size. Family assignment follows a fixed cyclic pattern over variants, yielding 76 instances from the linear traffic-light family (Example 1), 57 from the charging extension (Example 2), and 57 from the three-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
 
 All methods are run with the same maximum search depth (160) and evaluated per instance under fixed runtime limits. We use a stricter limit for the locality planner (10 seconds) and a looser limit for both baselines (30 seconds), so the comparison does not disadvantage the non-local methods. The locality parameter is fixed at $L=3$, matching the locality structure of the benchmark family. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. Reported planning times exclude validation time, so runtime values represent planner-only cost.
 
@@ -731,7 +723,7 @@ Brute-force baseline & 97/190 & 93 & 4.76 & 0.51 & 28.92 \\
 \end{tabular}
 \end{table}
 
-To make the cross-example effect explicit, Table \ref{t:eval-families} reports success counts separately for the three benchmark families. The locality planner remains complete in each family. The automata/progression baseline is complete on the first and second families, but loses robustness on the two-lane family. The brute-force baseline loses robustness already on the second family and further on larger two-lane instances.
+To make the cross-example effect explicit, Table \ref{t:eval-families} reports success counts separately for the three benchmark families. The locality planner remains complete in each family. The automata/progression baseline is complete on the first and second families, but loses robustness on the three-lane family. The brute-force baseline loses robustness already on the second family and further on larger three-lane instances.
 
 \begin{table}[ht!]
 \centering
@@ -743,7 +735,7 @@ Family & Locality-based & Automata/progression & Brute-force \\
 \midrule
 Example 1 (linear traffic lights, 76 instances) & 76/76 & 63/76 & 50/76 \\
 Example 2 (charging extension, 57 instances) & 57/57 & 35/57 & 20/57 \\
-Example 3 (two-lane corridor, 57 instances) & 57/57 & 18/57 & 27/57 \\
+Example 3 (three-lane corridor, 57 instances) & 57/57 & 18/57 & 27/57 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -753,6 +745,7 @@ Example 3 (two-lane corridor, 57 instances) & 57/57 & 18/57 & 27/57 \\
 \includegraphics[width=0.82\textwidth]{figures/benchmark-time-median-iqr-vs-n.png}
 \caption{Runtime versus instance size $n$ with ten instances per size. Solid lines show median runtime for each method and dashed side lines show the first and third quartiles (IQR band).}
 \label{f3}
+\Description{Runtime by instance size for locality, brute-force, and automata/progression planners. Each method is shown with a median line and dashed first/third quartile lines.}
 \end{center}
 \end{figure}
 
@@ -761,6 +754,7 @@ Example 3 (two-lane corridor, 57 instances) & 57/57 & 18/57 & 27/57 \\
 \includegraphics[width=0.82\textwidth]{figures/benchmark-time-locality.png}
 \caption{Locality-only runtime detail. The left panel shows all locality runs grouped by $n$ with the mean trend, and the right panel shows the same runs by case index. Isolating this method reveals its internal growth pattern that is visually compressed in the multi-method comparison.}
 \label{f3local}
+\Description{Two-panel runtime plot for the locality planner only: scatter and trend by size in the left panel, and per-case runtime in the right panel.}
 \end{center}
 \end{figure}
 
