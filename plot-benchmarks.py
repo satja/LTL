@@ -7,6 +7,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import argparse
+import math
+import statistics
+from scipy.stats import mannwhitneyu
 
 # CLI flags:
 #   --csv PATH: benchmark CSV to read (default: tests/benchmark.csv)
@@ -174,3 +177,69 @@ fig.savefig(out3, dpi=160)
 plt.close(fig)
 
 print(f"Wrote {out3}")
+
+# ---- Plot 4: mean +/- std by n for all methods ----
+def series_by_n(points, idx_time):
+    buckets = defaultdict(list)
+    for d in points:
+        if d[1] is None:
+            continue
+        buckets[d[1]].append(d[idx_time])
+    xs = sorted(buckets.keys())
+    means = []
+    stds = []
+    for x in xs:
+        vals = buckets[x]
+        means.append(sum(vals) / len(vals))
+        stds.append(statistics.pstdev(vals) if len(vals) > 1 else 0.0)
+    return xs, means, stds
+
+
+pxs, pmean, pstd = series_by_n(ok, 4)
+bxs, bmean, bstd = series_by_n(ok, 6)
+axs, amean, astd = series_by_n(ok, 8)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+def draw_mean_std(xs, mean, std, label, color):
+    if not xs:
+        return
+    upper = [m + s for m, s in zip(mean, std)]
+    lower = [max(0.0, m - s) for m, s in zip(mean, std)]
+    ax.plot(xs, mean, linewidth=2.2, color=color, label=label)
+    ax.plot(xs, upper, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
+    ax.plot(xs, lower, linewidth=1.2, linestyle="--", color=color, alpha=0.9)
+    ax.fill_between(xs, lower, upper, color=color, alpha=0.12)
+
+draw_mean_std(pxs, pmean, pstd, "locality (mean ± std)", "#1f77b4")
+draw_mean_std(bxs, bmean, bstd, "bruteforce (mean ± std)", "#d62728")
+draw_mean_std(axs, amean, astd, "automata (mean ± std)", "#2ca02c")
+
+ax.set_title("Mean Runtime by n with Standard Deviation Bands")
+ax.set_xlabel("n (number of intersections)")
+ax.set_ylabel("time (seconds)")
+ax.grid(True, alpha=0.3)
+ax.legend()
+
+out4 = OUT_DIR / "benchmark-time-mean-std-vs-n.png"
+fig.tight_layout()
+fig.savefig(out4, dpi=160)
+plt.close(fig)
+
+print(f"Wrote {out4}")
+
+# ---- Mann-Whitney U tests: locality vs baselines ----
+planner_all = [d[4] for d in ok if not math.isnan(d[4])]
+bf_all = [d[6] for d in ok if not math.isnan(d[6])]
+auto_all = [d[8] for d in ok if not math.isnan(d[8])]
+
+u_pb, p_pb = mannwhitneyu(planner_all, bf_all, alternative="less")
+u_pa, p_pa = mannwhitneyu(planner_all, auto_all, alternative="less")
+
+stats_path = OUT_DIR / "benchmark-stats.txt"
+with stats_path.open("w") as f:
+    f.write("Mann-Whitney U tests (alternative: locality time < baseline time)\n")
+    f.write(f"locality vs brute-force: U={u_pb:.3f}, p={p_pb:.12g}\n")
+    f.write(f"locality vs automata: U={u_pa:.3f}, p={p_pa:.12g}\n")
+
+print(f"Wrote {stats_path}")

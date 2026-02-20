@@ -1,6 +1,6 @@
-ra1, ra2, ra3, ra4, ra5, ra6, ra7, ra8, rb1, rb2, rb3, rb4, rb5, rb6, rb7, rb8, done1, done2, done3, done4, done5, done6, done7, done8
+ra1, ra2, ra3, ra4, ra5, ra6, rb1, rb2, rb3, rb4, rb5, rb6, done1, done2, done3, done4, done5, done6
 collision
-TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
 FALSE
 - mA1 ra1 : TRUE
 + mA1 ra2 : TRUE
@@ -22,14 +22,6 @@ FALSE
 + mA5 ra6 : TRUE
 - mB5 rb5 : TRUE
 + mB5 rb6 : TRUE
-- mA6 ra6 : TRUE
-+ mA6 ra7 : TRUE
-- mB6 rb6 : TRUE
-+ mB6 rb7 : TRUE
-- mA7 ra7 : TRUE
-+ mA7 ra8 : TRUE
-- mB7 rb7 : TRUE
-+ mB7 rb8 : TRUE
 - sAB1 ra1 : TRUE
 + sAB1 rb1 : TRUE
 - sBA1 rb1 : TRUE
@@ -66,20 +58,7 @@ FALSE
 + sBA6 ra6 : TRUE
 + repA6 done6 : ra6
 + repB6 done6 : rb6
-- sAB7 ra7 : TRUE
-+ sAB7 rb7 : TRUE
-- sBA7 rb7 : TRUE
-+ sBA7 ra7 : TRUE
-+ repA7 done7 : ra7
-+ repB7 done7 : rb7
-- sAB8 ra8 : TRUE
-+ sAB8 rb8 : TRUE
-- sBA8 rb8 : TRUE
-+ sBA8 ra8 : TRUE
-+ repA8 done8 : ra8
-+ repB8 done8 : rb8
-l : ( FG (done2))
-l : ( FG (done5))
-l : ( FG (done8))
-l : ( FG (rb8))
+l : ( FG (done3))
+l : ( FG (done6))
+l : ( FG (rb6))
 g : ( G ( NOT (collision)))

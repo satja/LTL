@@ -697,25 +697,27 @@ This section evaluates whether the theoretical locality advantage translates int
 
 \subsection{Setup}
 
-The benchmark set consists of 57 systematically generated instances with problem size $n\in[6,24]$ and three instances per size. Each size contributes one instance from each example family, so there are 19 instances from the linear traffic-light family in Example 1, 19 instances from the charging extension in Example 2, and 19 instances from the two-lane repair corridor in Example 3. The generation procedure is deterministic and size-ordered, with nontrivial damaged-location patterns chosen systematically for each size. This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly three benchmark instances (one per family), while the per-case view enumerates all 57 instances individually in deterministic benchmark order.
+The benchmark set consists of 190 systematically generated instances with problem size $n\in[6,24]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial damaged-location patterns chosen systematically for each size. Family assignment follows a fixed cyclic pattern over variants, yielding 76 instances from the linear traffic-light family (Example 1), 57 from the charging extension (Example 2), and 57 from the two-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
 
 All methods are run with the same maximum search depth (160) and evaluated per instance under fixed runtime limits. We use a stricter limit for the locality planner (10 seconds) and a looser limit for both baselines (30 seconds), so the comparison does not disadvantage the non-local methods. The locality parameter is fixed at $L=3$, matching the locality structure of the benchmark family. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. Reported planning times exclude validation time, so runtime values represent planner-only cost.
 
 \subsection{Results}
 
-Table \ref{t:eval} summarizes success counts and runtime statistics on the full 57-instance suite. The locality-based planner solves all 57 instances within the 10-second limit and all 57 outputs are validated. The automata/progression baseline solves 45 instances and times out on 12, with all 45 successful outputs validated. The brute-force baseline solves 32 instances and times out on 25, with all 32 successful outputs validated. Runtime statistics are computed over successful runs only: the locality planner has mean runtime 0.095s, median 0.01s, and maximum 0.70s; the automata/progression baseline has mean 1.66s, median 0.09s, and maximum 25.87s; and the brute-force baseline has mean 5.24s, median 0.97s, and maximum 29.16s.
+Table \ref{t:eval} summarizes success counts and runtime statistics on the full 190-instance suite. The locality-based planner solves all 190 instances within the 10-second limit and all 190 outputs are validated. The automata/progression baseline solves 116 instances and times out on 74, with all 116 successful outputs validated. The brute-force baseline solves 97 instances and times out on 93, with all 97 successful outputs validated. Runtime statistics are computed over successful runs only: the locality planner has mean runtime 0.146s, median 0.02s, and maximum 1.21s; the automata/progression baseline has mean 1.95s, median 0.20s, and maximum 22.67s; and the brute-force baseline has mean 4.76s, median 0.51s, and maximum 28.92s.
+
+To test whether the runtime advantage is statistically significant at the distribution level, we apply one-sided Mann--Whitney U tests with alternative hypothesis that locality runtimes are smaller than baseline runtimes. Using per-instance planner times (including timeout-capped values), we obtain $p=9.88\times 10^{-45}$ for locality versus brute force and $p=1.08\times 10^{-28}$ for locality versus automata/progression. These results strongly support the claim that the locality approach is systematically faster on this benchmark regime.
 
 \begin{table}[ht!]
 \centering
-\caption{Benchmark summary over 57 instances (successful runs only for runtime statistics).}
+\caption{Benchmark summary over 190 instances (successful runs only for runtime statistics).}
 \label{t:eval}
 \begin{tabular}{lccccc}
 \toprule
 Method & Success & Timeout & Mean (s) & Median (s) & Max (s) \\
 \midrule
-Locality-based planner & 57/57 & 0 & 0.095 & 0.01 & 0.70 \\
-Automata/progression baseline & 45/57 & 12 & 1.66 & 0.09 & 25.87 \\
-Brute-force baseline & 32/57 & 25 & 5.24 & 0.97 & 29.16 \\
+Locality-based planner & 190/190 & 0 & 0.146 & 0.02 & 1.21 \\
+Automata/progression baseline & 116/190 & 74 & 1.95 & 0.20 & 22.67 \\
+Brute-force baseline & 97/190 & 93 & 4.76 & 0.51 & 28.92 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -724,24 +726,23 @@ To make the cross-example effect explicit, Table \ref{t:eval-families} reports s
 
 \begin{table}[ht!]
 \centering
-\caption{Success counts by benchmark family (19 instances per family).}
+\caption{Success counts by benchmark family.}
 \label{t:eval-families}
 \begin{tabular}{lccc}
 \toprule
 Family & Locality-based & Automata/progression & Brute-force \\
 \midrule
-Example 1 (linear traffic lights) & 19/19 & 19/19 & 15/19 \\
-Example 2 (charging extension) & 19/19 & 19/19 & 7/19 \\
-Example 3 (two-lane corridor) & 19/19 & 7/19 & 10/19 \\
+Example 1 (linear traffic lights, 76 instances) & 76/76 & 63/76 & 50/76 \\
+Example 2 (charging extension, 57 instances) & 57/57 & 35/57 & 20/57 \\
+Example 3 (two-lane corridor, 57 instances) & 57/57 & 18/57 & 27/57 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[H]
 \begin{center}
-\includegraphics[width=0.48\textwidth]{benchmark-time-vs-n.png}
-\includegraphics[width=0.48\textwidth]{benchmark-time-vs-case.png}
-\caption{Benchmark plots: runtime versus instance size $n$ (left; three instances per $n$) and runtime per case (right; one point per benchmark instance, 57 total, ordered deterministically by case index).}
+\includegraphics[width=0.82\textwidth]{benchmark-time-mean-std-vs-n.png}
+\caption{Runtime versus instance size $n$ with ten instances per size. Solid lines show mean runtime for each method and dashed side lines show mean $\pm$ one standard deviation.}
 \label{f3}
 \end{center}
 \end{figure}
@@ -756,8 +757,8 @@ Example 3 (two-lane corridor) & 19/19 & 7/19 & 10/19 \\
 
 \subsection{Results Discussion}
 
-The central empirical observation is that locality-aware state compression dominates across all three benchmark families, not only on the base linear family. Even with the strictest time budget, the locality planner solves every instance and stays well below one second on every run. This is important because the three families stress different parts of the model: the first emphasizes local repair propagation with global congestion safety, the second adds charging-related propositions and additional temporal obligations, and the third introduces lane switches and collision-avoidance structure in a narrow two-dimensional geometry.
-Figure \ref{f3local} complements Figure \ref{f3} by isolating only the locality planner. This view confirms that runtime still increases with instance difficulty, but on a much smaller scale than for the baselines.
+The central empirical observation is that locality-aware state compression dominates across all three benchmark families, not only on the base linear family. Even with the strictest time budget, the locality planner solves every instance and stays well below two seconds on every run. This is important because the three families stress different parts of the model: the first emphasizes local repair propagation with global congestion safety, the second adds charging-related propositions and additional temporal obligations, and the third introduces lane switches and collision-avoidance structure in a narrow two-dimensional geometry.
+Figure \ref{f3} provides the requested aggregate view by number of intersections: for each method, the mean runtime grows with $n$, and the dashed bands show the corresponding mean $\pm$ standard deviation. Figure \ref{f3local} complements this by isolating only the locality planner. This view confirms that locality runtime still increases with instance difficulty, but on a much smaller scale than for the baselines.
 
 The baseline behavior is heterogeneous by family, which helps explain aggregate statistics. On Example 1, both baselines remain strong for most sizes, although brute force still times out on larger instances. On Example 2, the automata/progression baseline remains complete but with noticeably higher runtime than the locality method, while brute force times out on most instances. On Example 3, which combines movement, lane switching, and safety constraints in a richer local transition system, both baselines exhibit significant timeout rates, and the automata/progression baseline also loses completeness under the fixed timeout.
 
