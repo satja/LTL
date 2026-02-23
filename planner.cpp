@@ -65,9 +65,6 @@ std::vector<NamedFormula> global_formulas;
 std::unordered_map<std::string, std::unordered_map<std::string, formula*>> gammaMinus;
 std::unordered_map<std::string, std::unordered_map<std::string, formula*>> gammaPlus;
 
-// If the input includes an action sequence, we can validate or reuse it.
-std::vector<std::string> input_actions;
-
 // ----- Formula parsing and evaluation (mirrors validate.cpp) -----
 
 static int getValueForKey(int key) {
@@ -183,6 +180,14 @@ class formula {
                     return;
                 }
 
+                // If this is just extra wrapping parentheses around one
+                // subformula (e.g., "(NOT (p))"), recurse on the stripped body.
+                if (stripped != f) {
+                    formula* fs = new formula(stripped);
+                    parts.push_back(fs);
+                    return;
+                }
+
                 if (f[0] == '(' && f[1] == '(') {
                     std::string tmp = "";
                     for (int i = 1; i < static_cast<int>(f.size()) - 1; i++) {
@@ -232,6 +237,21 @@ class formula {
             }
             if (gv_key.find(f) != gv_key.end()) {
                 variables.push_back(gv_key[f]);
+                return;
+            }
+
+            // Handle top-level binary chains (including U) even without
+            // outer parentheses, e.g., "NOT (p) OR q".
+            std::vector<std::string> top_parts;
+            std::vector<int> top_ops;
+            if (splitTopLevelOps(f, top_parts, top_ops)) {
+                for (const std::string& part : top_parts) {
+                    if (!part.empty()) {
+                        formula* fs = new formula(part);
+                        parts.push_back(fs);
+                    }
+                }
+                operators = top_ops;
                 return;
             }
 
@@ -330,8 +350,24 @@ class formula {
             return truth;
         }
 
+        if (operators.empty()) {
+            // Degenerate wrapped form, e.g., "(NOT (p))" after stripping.
+            assert(parts.size() == 1);
+            return parts[0]->evaluate();
+        }
+
         int truth = 0;
         int partsInd = 0;
+        // When parsing as top-level binary parts (e.g., a AND b),
+        // seed `truth` with the left operand before folding operators.
+        if (!operators.empty()) {
+            const std::string firstOp = key_operator[operators[0]];
+            if (firstOp == "AND" || firstOp == "OR" || firstOp == "U") {
+                assert(partsInd < static_cast<int>(parts.size()));
+                truth = parts[partsInd]->evaluate();
+                partsInd++;
+            }
+        }
         for (int i = 0; i < static_cast<int>(operators.size()); i++) {
             const std::string op = key_operator[operators[i]];
 
@@ -555,6 +591,7 @@ std::vector<int> always_value_ids;                        // value ids of type G
 // Early-stop configuration (set in main).
 static bool g_early_stop = false;
 static bool g_no_fu = false;
+static bool g_has_u = false;
 
 // Split on a top-level " U " token (depth 0), if present.
 static std::optional<std::pair<std::string, std::string>> splitTopLevelU(const std::string& s) {
@@ -765,6 +802,13 @@ static bool noFUValues() {
     return true;
 }
 
+static bool hasUValues() {
+    for (const Value& v : values) {
+        if (v.type == ValueType::U) return true;
+    }
+    return false;
+}
+
 // ----- Substate search -----
 
 /*
@@ -816,8 +860,9 @@ used as pruning; it only preserves intended U semantics.
 */
 static void updateTheta(Substate& s, int L) {
     for (const Value& v : values) {
-        if (!valueOnlyActive(v, s.i, L)) continue;
+        const bool active = valueOnlyActive(v, s.i, L);
         if (v.type == ValueType::F) {
+            if (!active) continue;
             if (stateModels(v.psi1, s)) {
                 s.theta.insert(v.id);
             }
@@ -831,6 +876,9 @@ static void updateTheta(Substate& s, int L) {
             const bool psi2True = (v.psi2 != nullptr) && stateModels(v.psi2, s);
             if (psi2True) {
                 s.theta.insert(v.id);
+                continue;
+            }
+            if (!active) {
                 continue;
             }
             const bool psi1True = (v.psi1 != nullptr) && stateModels(v.psi1, s);
@@ -857,17 +905,22 @@ static bool valueContainsLoc(const Value& v, int loc) {
 
 /*
 Global validity from Definition 4:
-- FG psi must hold now.
-- F psi and psi1 U psi2 must already be in Theta.
+- FG psi is checked only on the final state (validator semantics).
+- F psi must already be in Theta.
+- U-values may stay pending; only already-broken U-values are invalid.
 */
 static bool globalValid(const Substate& s, int L) {
     for (int id : global_value_ids) {
         const Value& v = values[id];
         if (!valueOnlyActive(v, s.i, L)) continue;
         if (v.type == ValueType::FG) {
-            if (!stateModels(v.psi1, s)) return false;
+            continue;
         } else if (v.type == ValueType::F || v.type == ValueType::U) {
-            if (s.theta.find(id) == s.theta.end()) return false;
+            if (v.type == ValueType::F) {
+                if (s.theta.find(id) == s.theta.end()) return false;
+            } else {
+                if (s.u_broken.find(id) != s.u_broken.end()) return false;
+            }
         } else if (v.type == ValueType::G) {
             if (!stateModels(v.psi1, s)) return false;
         }
@@ -900,9 +953,13 @@ static bool localLocValid(const Substate& s, int targetLoc, int L) {
         const Value& v = values[id];
         if (!otherLocsRecent(v)) continue;
         if (v.type == ValueType::FG) {
-            if (!stateModels(v.psi1, s)) return false;
+            continue;
         } else if (v.type == ValueType::F || v.type == ValueType::U) {
-            if (s.theta.find(id) == s.theta.end()) return false;
+            if (v.type == ValueType::F) {
+                if (s.theta.find(id) == s.theta.end()) return false;
+            } else {
+                if (s.u_broken.find(id) != s.u_broken.end()) return false;
+            }
         } else if (v.type == ValueType::G) {
             if (!stateModels(v.psi1, s)) return false;
         }
@@ -920,6 +977,7 @@ static bool finalValid(Substate& s, int L) {
     updateTheta(s, L);
     if (!checkAlwaysConstraints(s, L)) return false;
     if (!globalValid(s, L)) return false;
+    if (!fullFGGOk(s)) return false;
 
     for (int loc = s.i + 1; loc <= nLoc; loc++) {
         if (!localLocValid(s, loc, L)) return false;
@@ -1074,44 +1132,53 @@ static bool dfs(Substate& cur,
         if (finalValid(tmp, L)) return true;
     }
 
-    // Type 2 edge from Definition 6: move right if the leaving loc is valid.
-    if (cur.i < maxIndex) {
-        const int targetLoc = cur.i + 1;
-        if (localLocValid(cur, targetLoc, L)) {
-            Substate next = cur;
-            next.i = cur.i + 1;
+    auto tryActions = [&]() -> bool {
+        for (const ActionInfo& action : actionsList) {
+            if (!actionFitsInterval(action, cur.i, L)) continue;
+            Substate next;
+            applyAction(next, cur, action, L);
+            if (!checkAlwaysConstraints(next, L)) continue;
+            if (!globalValid(next, L)) continue;
 
-            const int dropLoc = next.i - L;
-            const int addLoc = next.i + 2 * L;
-
-            dropLocFromTheta(next, dropLoc);
-            addLocFromInitial(next, addLoc);
-            // Theta' removes values tied to the dropped loc and adds new ones.
-            updateTheta(next, L);
-
-            if (checkAlwaysConstraints(next, L) && globalValid(next, L)) {
-                if (dfs(next, L, maxIndex, plan, visited)) {
-                    cur = std::move(next);
-                    return true;
-                }
+            plan.push_back(action.name);
+            if (dfs(next, L, maxIndex, plan, visited)) {
+                cur = std::move(next);
+                return true;
             }
+            plan.pop_back();
         }
-    }
+        return false;
+    };
 
-    // Type 1 edges: apply any action that fits the current mutable window.
-    for (const ActionInfo& action : actionsList) {
-        if (!actionFitsInterval(action, cur.i, L)) continue;
-        Substate next;
-        applyAction(next, cur, action, L);
-        if (!checkAlwaysConstraints(next, L)) continue;
-        if (!globalValid(next, L)) continue;
+    auto tryMove = [&]() -> bool {
+        if (cur.i >= maxIndex) return false;
+        const int targetLoc = cur.i + 1;
+        if (!localLocValid(cur, targetLoc, L)) return false;
 
-        plan.push_back(action.name);
-        if (dfs(next, L, maxIndex, plan, visited)) {
-            cur = std::move(next);
-            return true;
-        }
-        plan.pop_back();
+        Substate next = cur;
+        next.i = cur.i + 1;
+
+        const int dropLoc = next.i - L;
+        const int addLoc = next.i + 2 * L;
+
+        dropLocFromTheta(next, dropLoc);
+        addLocFromInitial(next, addLoc);
+        // Theta' removes values tied to the dropped loc and adds new ones.
+        updateTheta(next, L);
+
+        if (!checkAlwaysConstraints(next, L) || !globalValid(next, L)) return false;
+        if (!dfs(next, L, maxIndex, plan, visited)) return false;
+        cur = std::move(next);
+        return true;
+    };
+
+    // U-heavy instances benefit from trying actions before shifting the window.
+    if (g_has_u) {
+        if (tryActions()) return true;
+        if (tryMove()) return true;
+    } else {
+        if (tryMove()) return true;
+        if (tryActions()) return true;
     }
 
     return false;
@@ -1294,16 +1361,8 @@ static void readProblem(std::istream& input) {
                 for (int i = 4; i < static_cast<int>(s.size()); i++) st += s[i];
                 global_formulas.push_back({st, new formula(st)});
             } else {
-                // Treat any other trailing line as a provided action sequence.
-                std::string act;
-                for (int i = 0; i < static_cast<int>(s.size()); i++) {
-                    if (s[i] != ' ') act += s[i];
-                    else {
-                        input_actions.push_back(act);
-                        act.clear();
-                    }
-                }
-                if (!act.empty()) input_actions.push_back(act);
+                // Ignore trailing action-sequence lines from full-format inputs.
+                // The planner always synthesizes a plan from the model.
             }
         }
 
@@ -1348,12 +1407,10 @@ int main(int argc, char** argv) {
     buildActionInfo();
     g_early_stop = earlyStop;
     g_no_fu = noFUValues();
+    g_has_u = hasUValues();
 
-    std::vector<std::string> plan = input_actions;
-    bool found = true;
-    if (plan.empty()) {
-        found = synthesizePlan(L, plan);
-    }
+    std::vector<std::string> plan;
+    const bool found = synthesizePlan(L, plan);
 
     if (!found) {
         std::cerr << "No satisfying plan found (L=" << L << ").\n";

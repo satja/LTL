@@ -76,14 +76,19 @@ g++ -std=c++17 -O2 -Wall -Wextra -pedantic ltlf-progress-planner.cpp -o ltlf-pro
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic validate.cpp -o validate
 ```
 
-Use the input-only format as planner input, and the full format as validator input.
+Use model-only inputs as planner input, and the full format as validator input.
 
 Single-case workflow:
 
 ```bash
-./planner --L 3 < input-only.txt > planned.full.txt
+./planner --L 3 < example1-linear.txt > planned.full.txt
 ./validate < planned.full.txt
 ```
+
+Main example inputs in the project root:
+- `example1-linear.txt`
+- `example2-chargers.txt`
+- `example3-production-corridor.txt`
 
 Planner flags:
 - `--L L`: locality parameter (default 3).

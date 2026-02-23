@@ -206,8 +206,10 @@ class formula {
         cp->xPrepared = xPrepared;
         cp->xTrue = xTrue;
         cp->xInd = xInd;
+        cp->uRes = uRes;
         cp->fTrue = fTrue;
         cp->fInd = fInd;
+        cp->uInd = uInd;
         cp->gFalse = gFalse;
         cp->gInd = gInd;
         cp->lastAction = lastAction;
@@ -245,11 +247,13 @@ class formula {
         appendInt(lastAction);
         appendInt(xInd);
         appendInt(fInd);
+        appendInt(uInd);
         appendInt(gInd);
         appendVec(operators);
         appendVec(variables);
         appendVec(xPrepared);
         appendVec(xTrue);
+        appendVec(uRes);
         appendVec(fTrue);
         appendVec(gFalse);
         appendInt(static_cast<int>(parts.size()));
@@ -320,6 +324,13 @@ class formula {
                     return;
                 }
 
+                // If this is just extra wrapping parentheses around one
+                // subformula (e.g., "(NOT (p))"), recurse on the stripped body.
+                if (stripped != f) {
+                    parts.push_back(new formula(stripped));
+                    return;
+                }
+
                 // Parse a parenthesized binary chain.
                 if (f[0] == '(' && f[1] == '(') {
                     std::string tmp = "";
@@ -371,6 +382,20 @@ class formula {
             }
             if (gv_key.find(f) != gv_key.end()) {
                 variables.push_back(gv_key[f]);
+                return;
+            }
+
+            // Handle top-level binary chains (including U) even without
+            // outer parentheses, e.g., "NOT (p) U q".
+            std::vector<std::string> top_parts;
+            std::vector<int> top_ops;
+            if (splitTopLevelOps(f, top_parts, top_ops)) {
+                for (const std::string& part : top_parts) {
+                    if (!part.empty()) {
+                        parts.push_back(new formula(part));
+                    }
+                }
+                operators = top_ops;
                 return;
             }
 
@@ -494,8 +519,24 @@ class formula {
         }
 
         // Composite case: walk operators left-to-right with per-operator behavior.
+        if (operators.empty()) {
+            // Degenerate wrapped form, e.g., "(NOT (p))" after stripping.
+            assert(parts.size() == 1);
+            return parts[0]->evaluate();
+        }
+
         int truth = 0;
         int partsInd = 0;
+        // When parsing as top-level binary parts (e.g., a AND b),
+        // seed `truth` with the left operand before folding operators.
+        if (!operators.empty()) {
+            const std::string firstOp = key_operator[operators[0]];
+            if (firstOp == "AND" || firstOp == "OR" || firstOp == "U") {
+                assert(partsInd < static_cast<int>(parts.size()));
+                truth = parts[partsInd]->evaluate();
+                partsInd++;
+            }
+        }
         for (int i = 0; i < static_cast<int>(operators.size()); i++) {
             const std::string op = key_operator[operators[i]];
 
@@ -577,37 +618,36 @@ class formula {
                     partsInd++;
                 }
             } else if (op == "U") {
+                // The left side of U is in `truth`; now evaluate right side.
                 int t1 = 0;
-                if (i + 1 < static_cast<int>(operators.size())) {
-                    if (key_operator[operators[i + 1]] == "NOT") {
-                        assert(partsInd < static_cast<int>(parts.size()));
-                        t1 = (1 - parts[partsInd]->evaluate());
-                        partsInd++;
-                        i++;
-                    } else {
-                        assert(partsInd < static_cast<int>(parts.size()));
-                        t1 = parts[partsInd]->evaluate();
-                        partsInd++;
-                        i++;
-                    }
+                if (i + 1 < static_cast<int>(operators.size()) &&
+                    key_operator[operators[i + 1]] == "NOT") {
+                    assert(partsInd < static_cast<int>(parts.size()));
+                    t1 = (1 - parts[partsInd]->evaluate());
+                    partsInd++;
+                    i++;
+                } else {
+                    assert(partsInd < static_cast<int>(parts.size()));
+                    t1 = parts[partsInd]->evaluate();
+                    partsInd++;
+                }
 
-                    if (uRes.size() > uInd) {
-                        if (uRes[uInd] == 1) {
-                            truth = 1;
-                        } else if (uRes[uInd] == -1) {
-                            truth = 0;
-                        }
-                    } else {
-                        if (!truth && !t1) {
-                            uRes.push_back(-1);
-                            uInd++;
-                            truth = 0;
-                        }
-                        if (t1) {
-                            uRes.push_back(1);
-                            uInd++;
-                            truth = 1;
-                        }
+                if (uRes.size() > uInd) {
+                    if (uRes[uInd] == 1) {
+                        truth = 1;
+                    } else if (uRes[uInd] == -1) {
+                        truth = 0;
+                    }
+                } else {
+                    if (!truth && !t1) {
+                        uRes.push_back(-1);
+                        uInd++;
+                        truth = 0;
+                    }
+                    if (t1) {
+                        uRes.push_back(1);
+                        uInd++;
+                        truth = 1;
                     }
                 }
             }
@@ -1052,17 +1092,8 @@ static void readProblem(std::istream& input) {
                 formula* f = new formula(st);
                 global_formulas.push_back({st, f});
             } else {
-                // Treat the line as a provided action sequence.
-                std::string act = "";
-                for (int i = 0; i < static_cast<int>(s.size()); i++) {
-                    if (s[i] != ' ') {
-                        act += s[i];
-                    } else {
-                        input_actions.push_back(act);
-                        act = "";
-                    }
-                }
-                input_actions.push_back(act);
+                // Ignore trailing action-sequence lines from full-format inputs.
+                // The planner always synthesizes a plan from the model.
             }
         }
 
@@ -1102,12 +1133,8 @@ int main(int argc, char** argv) {
 
     readProblem(std::cin);
 
-    // If a plan is provided, prefer it; otherwise synthesize one.
-    std::vector<std::string> plan = input_actions;
-    bool found = true;
-    if (plan.empty()) {
-        found = findPlan(maxDepth, plan);
-    }
+    std::vector<std::string> plan;
+    const bool found = findPlan(maxDepth, plan);
 
     if (!found) {
         std::cerr << "No satisfying plan found up to depth " << maxDepth << '\n';

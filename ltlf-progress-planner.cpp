@@ -73,6 +73,89 @@ static int getValueForKey(int key) {
     return gv_values[git->second];
 }
 
+static std::string trimString(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) {
+        start++;
+    }
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
+        end--;
+    }
+    return s.substr(start, end - start);
+}
+
+static std::string stripOuterParens(const std::string& s) {
+    std::string cur = trimString(s);
+    while (!cur.empty() && cur.front() == '(' && cur.back() == ')') {
+        int depth = 0;
+        bool wrapsAll = true;
+        for (int i = 0; i < static_cast<int>(cur.size()); i++) {
+            if (cur[i] == '(') depth++;
+            if (cur[i] == ')') depth--;
+            if (depth == 0 && i != static_cast<int>(cur.size()) - 1) {
+                wrapsAll = false;
+                break;
+            }
+        }
+        if (!wrapsAll) break;
+        cur = trimString(cur.substr(1, cur.size() - 2));
+    }
+    return cur;
+}
+
+static bool splitTopLevelOps(const std::string& expr,
+                             std::vector<std::string>& parts_out,
+                             std::vector<int>& ops_out) {
+    std::string current;
+    int depth = 0;
+    auto match_word = [&](int i, const std::string& word) {
+        if (i + static_cast<int>(word.size()) > static_cast<int>(expr.size())) return false;
+        if (expr.compare(i, word.size(), word) != 0) return false;
+        const bool left_ok = (i == 0) || std::isspace(static_cast<unsigned char>(expr[i - 1]));
+        const bool right_ok =
+            (i + static_cast<int>(word.size()) == static_cast<int>(expr.size())) ||
+            std::isspace(static_cast<unsigned char>(expr[i + word.size()]));
+        return left_ok && right_ok;
+    };
+
+    for (int i = 0; i < static_cast<int>(expr.size()); i++) {
+        const char ch = expr[i];
+        if (ch == '(') depth++;
+        if (ch == ')') depth--;
+
+        if (depth == 0) {
+            if (match_word(i, "AND")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["AND"]);
+                i += 2;
+                continue;
+            }
+            if (match_word(i, "OR")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["OR"]);
+                i += 1;
+                continue;
+            }
+            if (match_word(i, "U")) {
+                parts_out.push_back(trimString(current));
+                current.clear();
+                ops_out.push_back(operator_key["U"]);
+                continue;
+            }
+        }
+        current.push_back(ch);
+    }
+
+    if (!current.empty()) {
+        parts_out.push_back(trimString(current));
+    }
+
+    return !ops_out.empty();
+}
+
 /*
 Propositional/temporal formula evaluator for gamma conditions.
 This mirrors the existing bruteforce planner so gamma expressions remain
@@ -85,8 +168,9 @@ class formula {
     std::vector<int> xPrepared;
     std::vector<int> xTrue;
     int xInd = 0;
+    std::vector<int> uRes;
     std::vector<int> fTrue;
-    int fInd = 0;
+    int fInd = 0, uInd = 0;
     std::vector<int> gFalse;
     int gInd = 0;
     int lastAction = 0;
@@ -99,93 +183,184 @@ class formula {
     formula() = default;
 
     formula(std::string f) {
-        // Normalize simple TRUE/FALSE literals.
-        if (f == "TRUE") {
-            TrueConstant = 1;
-            return;
-        }
-        if (f == "FALSE") {
-            FalseConstant = 1;
-            return;
-        }
-
-        int ind = -1;
-        for (int i = 0; i < static_cast<int>(f.size()); i++) {
-            if (f[i] == ' ') {
-                ind = i;
-                break;
-            }
-        }
-
-        if (ind == -1) {
-            // Atomic proposition.
-            if (lv_key.find(f) != lv_key.end() || gv_key.find(f) != gv_key.end()) {
-                const int key = lv_key.count(f) ? lv_key[f] : gv_key[f];
-                variables.push_back(key);
-                fixed = 1;
-            } else {
-                // Treat unknown atom as FALSE to avoid crashes.
-                FalseConstant = 1;
-            }
-            return;
-        }
-
-        std::string subf;
-        int i = 0;
-        if (!f.empty() && f[0] == ' ') {
-            i = 1;
-        }
-        for (; i < static_cast<int>(f.size()); i++) {
-            // Read a token up to the next space.
-            while (i < static_cast<int>(f.size()) && f[i] != ' ') {
-                subf += f[i];
-                i++;
-            }
-            if (subf == "NOT" || subf == "AND" || subf == "OR" || subf == "G" ||
-                subf == "F" || subf == "X" || subf == "U" || subf == "FG") {
-                if (!subf.empty()) {
-                    operators.push_back(operator_key[subf]);
-                }
-                subf.clear();
-                i++;
-                int c = 0;
-                if (i < static_cast<int>(f.size()) && f[i] == '(') {
-                    i++;
-                    c++;
-                }
-                while (i < static_cast<int>(f.size()) && f[i] != ')') {
-                    if (f[i] == '(') {
-                        c++;
+        fixed = value = 0;
+        std::string op = "";
+        int ind = 0;
+        if (f[0] == '(') {
+            if (f[2] == 'F') {
+                op += "F";
+                if (f[3] == 'G') {
+                    if (f[4] == ' ') {
+                        op += "G";
+                        ind = 4;
                     }
-                    subf += f[i];
-                    i++;
+                } else if (f[3] == ' ') {
+                    ind = 3;
                 }
-                if (c == 2) {
-                    subf += ")";
+            } else if (f[2] == 'G') {
+                op += "G";
+                if (f[3] == 'F') {
+                    if (f[4] == ' ') {
+                        op += "F";
+                        ind = 4;
+                    }
+                } else if (f[3] == ' ') {
+                    ind = 3;
+                }
+            } else if (f[2] == 'X') {
+                op += "X";
+                ind = 3;
+            } else if (f[2] == 'N' && f[3] == 'O' && f[4] == 'T') {
+                op += "NOT";
+                ind = 5;
+            }
+
+            if (ind == 3 || ind == 4 || ind == 5) {
+                if (op != "") {
+                    operators.push_back(operator_key[op]);
+                }
+                std::string subf = "";
+                for (int i = ind + 2; i < static_cast<int>(f.size()) - 2; i++) {
+                    subf += f[i];
                 }
                 formula* fs = new formula(subf);
                 parts.push_back(fs);
-                subf.clear();
             } else {
-                if (lv_key.find(subf) != lv_key.end() || gv_key.find(subf) != gv_key.end()) {
-                    formula* fs = new formula(subf);
-                    parts.push_back(fs);
-                    subf.clear();
+                std::string stripped = stripOuterParens(f);
+                std::vector<std::string> top_parts;
+                std::vector<int> top_ops;
+                if (splitTopLevelOps(stripped, top_parts, top_ops)) {
+                    for (const std::string& part : top_parts) {
+                        if (!part.empty()) {
+                            parts.push_back(new formula(part));
+                        }
+                    }
+                    operators = top_ops;
+                    return;
+                }
+
+                if (stripped != f) {
+                    parts.push_back(new formula(stripped));
+                    return;
+                }
+
+                if (f[0] == '(' && f[1] == '(') {
+                    std::string tmp = "";
+                    for (int i = 1; i < static_cast<int>(f.size()) - 1; i++) {
+                        tmp += f[i];
+                    }
+                    f = tmp;
+                }
+
+                std::string subf = "";
+                for (int i = 1; i < static_cast<int>(f.size()) - 1; i++) {
+                    if (f[i] != ')' && f[i] != '(') {
+                        subf += f[i];
+                    } else if (f[i] == '(') {
+                        continue;
+                    } else {
+                        formula* fs = new formula(subf);
+                        parts.push_back(fs);
+                        subf = "";
+                        if (i == static_cast<int>(f.size()) - 1) {
+                            break;
+                        }
+                        int j = i + 2;
+                        while (j < static_cast<int>(f.size()) && f[j] != ' ') {
+                            subf += f[j];
+                            j++;
+                        }
+                        if (subf != "") {
+                            operators.push_back(operator_key[subf]);
+                        }
+                        subf = "";
+                    }
                 }
             }
-
-            subf.clear();
-            if (i == static_cast<int>(f.size()) - 1) {
-                break;
+        } else {
+            if (f == "TRUE") {
+                TrueConstant = 1;
+                return;
+            } else if (f == "FALSE") {
+                FalseConstant = 1;
+                return;
             }
 
-            // Read the operator between subformulas.
-            while (i < static_cast<int>(f.size()) && f[i] != ' ' && f[i] != ')') {
-                subf += f[i];
-                i++;
+            if (lv_key.find(f) != lv_key.end()) {
+                variables.push_back(lv_key[f]);
+                return;
             }
-            if (!subf.empty()) {
-                operators.push_back(operator_key[subf]);
+            if (gv_key.find(f) != gv_key.end()) {
+                variables.push_back(gv_key[f]);
+                return;
+            }
+
+            std::vector<std::string> top_parts;
+            std::vector<int> top_ops;
+            if (splitTopLevelOps(f, top_parts, top_ops)) {
+                for (const std::string& part : top_parts) {
+                    if (!part.empty()) {
+                        parts.push_back(new formula(part));
+                    }
+                }
+                operators = top_ops;
+                return;
+            }
+
+            std::string subf = "";
+            int i = 0;
+            if (f[0] == ' ') {
+                i = 1;
+            }
+            for (; i < static_cast<int>(f.size()); i++) {
+                while (i < static_cast<int>(f.size()) && f[i] != ' ') {
+                    subf += f[i];
+                    i++;
+                }
+                if (subf == "NOT" || subf == "AND" || subf == "OR") {
+                    if (subf != "") {
+                        operators.push_back(operator_key[subf]);
+                    }
+                    subf = "";
+                    i++;
+                    int c = 0;
+                    if (f[i] == '(') {
+                        i++;
+                        c++;
+                    }
+                    while (i < static_cast<int>(f.size()) && f[i] != ')') {
+                        if (f[i] == '(') {
+                            c++;
+                        }
+                        subf += f[i];
+                        i++;
+                    }
+                    if (c == 2) {
+                        subf += ")";
+                    }
+                    formula* fs = new formula(subf);
+                    parts.push_back(fs);
+                    subf = "";
+                } else {
+                    if (lv_key.find(subf) != lv_key.end() || gv_key.find(subf) != gv_key.end()) {
+                        formula* fs = new formula(subf);
+                        parts.push_back(fs);
+                        subf = "";
+                    }
+                }
+
+                subf = "";
+                if (i == static_cast<int>(f.size()) - 1) {
+                    break;
+                }
+
+                while (i < static_cast<int>(f.size()) && f[i] != ' ' && f[i] != ')') {
+                    subf += f[i];
+                    i++;
+                }
+                if (subf != "") {
+                    operators.push_back(operator_key[subf]);
+                }
             }
         }
     }
@@ -202,13 +377,68 @@ class formula {
                 return 0;
             }
 
-            assert(!variables.empty());
+            if (variables.empty()) {
+                return 0;
+            }
+            if (variables.size() == 1) {
+                const int varA = variables[0];
+                return getValueForKey(varA);
+            }
+
+            int truth = 0;
+            assert(variables.size() >= 2);
+            assert(!operators.empty());
             const int varA = variables[0];
-            return getValueForKey(varA);
+            const int varB = variables[1];
+            const int val1 = getValueForKey(varA);
+            const int val2 = getValueForKey(varB);
+            const std::string op = key_operator[operators[0]];
+            if (op == "AND") {
+                truth = val1 && val2;
+                return truth;
+            }
+            if (op == "OR") {
+                truth = val1 || val2;
+                return truth;
+            }
+            if (op == "U") {
+                if (uRes.size() > uInd) {
+                    if (uRes[uInd] == 1) return 1;
+                    if (uRes[uInd] == -1) return 0;
+                }
+                if (!val1 && !val2) {
+                    uRes.push_back(-1);
+                    uInd++;
+                    return 0;
+                }
+                if (val1 && !val2) return 1;
+                if (val2) {
+                    uRes.push_back(1);
+                    uInd++;
+                    return 1;
+                }
+            }
+            return truth;
+        }
+
+        if (operators.empty()) {
+            // Degenerate wrapped form, e.g., "(NOT (p))" after stripping.
+            assert(parts.size() == 1);
+            return parts[0]->evaluate();
         }
 
         int truth = 0;
         int partsInd = 0;
+        // When parsing as top-level binary parts (e.g., a AND b),
+        // seed `truth` with the left operand before folding operators.
+        if (!operators.empty()) {
+            const std::string firstOp = key_operator[operators[0]];
+            if (firstOp == "AND" || firstOp == "OR" || firstOp == "U") {
+                assert(partsInd < static_cast<int>(parts.size()));
+                truth = parts[partsInd]->evaluate();
+                partsInd++;
+            }
+        }
         for (int i = 0; i < static_cast<int>(operators.size()); i++) {
             const std::string op = key_operator[operators[i]];
 
@@ -289,9 +519,41 @@ class formula {
                     truth = truth || parts[partsInd]->evaluate();
                     partsInd++;
                 }
+            } else if (op == "U") {
+                int t1 = 0;
+                if (i + 1 < static_cast<int>(operators.size()) &&
+                    key_operator[operators[i + 1]] == "NOT") {
+                    assert(partsInd < static_cast<int>(parts.size()));
+                    t1 = (1 - parts[partsInd]->evaluate());
+                    partsInd++;
+                    i++;
+                } else {
+                    assert(partsInd < static_cast<int>(parts.size()));
+                    t1 = parts[partsInd]->evaluate();
+                    partsInd++;
+                }
+
+                if (uRes.size() > uInd) {
+                    if (uRes[uInd] == 1) {
+                        truth = 1;
+                    } else if (uRes[uInd] == -1) {
+                        truth = 0;
+                    }
+                } else {
+                    if (!truth && !t1) {
+                        uRes.push_back(-1);
+                        uInd++;
+                        truth = 0;
+                    }
+                    if (t1) {
+                        uRes.push_back(1);
+                        uInd++;
+                        truth = 1;
+                    }
+                }
             }
         }
-        xInd = fInd = gInd = 0;
+        xInd = fInd = gInd = uInd = 0;
         return truth;
     }
 };
@@ -1180,18 +1442,8 @@ static void readProblem(std::istream& input) {
                     value_formulas.push_back(strip_fg(ast));
                 }
             } else {
-                // Action sequence line (optional).
-                std::string token;
-                for (size_t i = 0; i <= s.size(); i++) {
-                    if (i == s.size() || std::isspace(static_cast<unsigned char>(s[i]))) {
-                        if (!token.empty()) {
-                            input_actions.push_back(token);
-                            token.clear();
-                        }
-                    } else {
-                        token.push_back(s[i]);
-                    }
-                }
+                // Ignore trailing action-sequence lines from full-format inputs.
+                // The planner always synthesizes a plan from the model.
             }
         }
 
@@ -1228,11 +1480,8 @@ int main(int argc, char** argv) {
 
     readProblem(std::cin);
 
-    std::vector<std::string> plan = input_actions;
-    bool found = true;
-    if (plan.empty()) {
-        found = find_plan_progression(maxDepth, plan);
-    }
+    std::vector<std::string> plan;
+    const bool found = find_plan_progression(maxDepth, plan);
 
     if (!found) {
         std::cerr << "No satisfying plan found up to depth " << maxDepth

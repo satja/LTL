@@ -232,6 +232,14 @@ class formula{
                 return;
               }
 
+              // If this is just extra wrapping parentheses around one
+              // subformula (e.g., "(NOT (p))"), recurse on the stripped body.
+              if (stripped != f) {
+                formula* fs = new formula(stripped);
+                parts.push_back(fs);
+                return;
+              }
+
               if(f[0] == '(' && f[1] == '('){ //case ((v1 op1 v2 op20 op () ... ()))
                         std::string tmp = "";
                         for(int i=1;i<f.size()-1;i++)
@@ -287,6 +295,21 @@ class formula{
                else if(gv_key.find(f) != gv_key.end()){//onlly vi
                       variables.push_back(gv_key[f]);
                        return;
+               }
+
+               // Handle top-level binary chains (including U) even without
+               // outer parentheses, e.g., "NOT (p) U q".
+               std::vector<std::string> top_parts;
+               std::vector<int> top_ops;
+               if (split_top_level_ops(f, top_parts, top_ops)) {
+                    for (const std::string& part : top_parts) {
+                        if (!part.empty()) {
+                            formula *fs = new formula(part);
+                            parts.push_back(fs);
+                        }
+                    }
+                    operators = top_ops;
+                    return;
                }
 
                std::string subf = ""; //more complex case
@@ -415,7 +438,23 @@ class formula{
          return truth;
       }
       else{//case NOT (X, F, G, FG) (v1) op1 v2 op2 NOT (v2) op3 v3 op4 ...
+             if(operators.empty()){
+                // Degenerate wrapped form, e.g., "(NOT (p))" after stripping.
+                assert(parts.size() == 1);
+                return parts[0]->evaluate();
+             }
              int truth = 0, partsInd = 0;
+
+           // When parsing as top-level binary parts (e.g., a AND b),
+           // seed `truth` with the left operand before folding operators.
+           if(!operators.empty()){
+              std::string firstOp = key_operator[operators[0]];
+              if(firstOp == "AND" || firstOp == "OR" || firstOp == "U"){
+                 assert(partsInd < parts.size());
+                 truth = parts[partsInd]->evaluate();
+                 partsInd++;
+              }
+           }
         
             
            // Evaluate the operator stream left-to-right, maintaining indices.
@@ -523,37 +562,35 @@ class formula{
                       }
               }
               else if(op == "U"){
+                      // The left side of U is in `truth`; now evaluate right side.
                       int t1 = 0;
-                      if(i + 1 < operators.size()){
-                          if(key_operator[operators[i+1]] == "NOT"){
-                              assert(partsInd < parts.size());
-                              t1 = (1 - parts[partsInd]->evaluate());
-                              partsInd++;
-                              i++;
-                          } else {
-                              assert(partsInd < parts.size());
-                              t1 = parts[partsInd]->evaluate();
-                              partsInd++;
-                              i++;
-                          }
+                      if(i + 1 < operators.size() && key_operator[operators[i+1]] == "NOT"){
+                          assert(partsInd < parts.size());
+                          t1 = (1 - parts[partsInd]->evaluate());
+                          partsInd++;
+                          i++;
+                      } else {
+                          assert(partsInd < parts.size());
+                          t1 = parts[partsInd]->evaluate();
+                          partsInd++;
+                      }
 
-                          if(uRes.size() > uInd){
-                              if(uRes[uInd] == 1) {
-                                  truth = 1;
-                              } else if(uRes[uInd] == -1) {
-                                  truth = 0;
-                              }
-                          } else {
-                              if(!truth && !t1){
-                                  uRes.push_back(-1);
-                                  uInd++;
-                                  truth = 0;
-                              }
-                              if(t1){
-                                  uRes.push_back(1);
-                                  uInd++;
-                                  truth = 1;
-                              }
+                      if(uRes.size() > uInd){
+                          if(uRes[uInd] == 1) {
+                              truth = 1;
+                          } else if(uRes[uInd] == -1) {
+                              truth = 0;
+                          }
+                      } else {
+                          if(!truth && !t1){
+                              uRes.push_back(-1);
+                              uInd++;
+                              truth = 0;
+                          }
+                          if(t1){
+                              uRes.push_back(1);
+                              uInd++;
+                              truth = 1;
                           }
                       }
               }
