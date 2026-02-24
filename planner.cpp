@@ -1081,15 +1081,12 @@ static std::string signature(const Substate& s, int L) {
 
     appendInt(s.i);
 
-    const int recentStart = std::max(1, s.i - L + 1);
-    const int activeEnd = std::min(nLoc, s.i + 2 * L);
-    for (int loc = recentStart; loc <= activeEnd; loc++) {
-        const auto itKeys = loc_keys.find(loc);
-        if (itKeys == loc_keys.end()) continue;
-        appendInt(loc);
-        for (int key : itKeys->second) {
-            appendInt(s.lv[lKey_index[key]]);
-        }
+    // Use the full local valuation in the visited signature.
+    // If we only keep the active window, we can merge states that differ on
+    // frozen locations. Those differences still matter for final FG checks.
+    appendInt(static_cast<int>(s.lv.size()));
+    for (int v : s.lv) {
+        appendInt(v);
     }
 
     appendInt(static_cast<int>(s.gv.size()));
