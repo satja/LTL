@@ -1,6 +1,6 @@
 on1, on2, on3, on4, on5, on6, on7, on8, on9, on10, on11, on12, on13, on14, on15, on16, broken1, broken2, broken3, broken4, broken5, broken6, broken7, broken8, broken9, broken10, broken11, broken12, broken13, broken14, broken15, broken16
 congestion
-TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
 FALSE
 - f2 broken2 : NOT (on1) OR (NOT (on3))
 + f2 on2 : NOT (on1) OR (NOT (on3))

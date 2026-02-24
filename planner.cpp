@@ -915,6 +915,18 @@ static bool globalValid(const Substate& s, int L) {
         const Value& v = values[id];
         if (!valueOnlyActive(v, s.i, L)) continue;
         if (v.type == ValueType::FG) {
+            // Prune impossible FG goals early when all referenced locals are
+            // already frozen and there is no global proposition in psi.
+            if (!v.has_global && !v.local_locs.empty()) {
+                bool allFrozen = true;
+                for (int loc : v.local_locs) {
+                    if (loc > s.i) {
+                        allFrozen = false;
+                        break;
+                    }
+                }
+                if (allFrozen && !stateModels(v.psi1, s)) return false;
+            }
             continue;
         } else if (v.type == ValueType::F || v.type == ValueType::U) {
             if (v.type == ValueType::F) {
@@ -954,7 +966,10 @@ static bool localLocValid(const Substate& s, int targetLoc, int L) {
         const Value& v = values[id];
         if (!otherLocsRecent(v)) continue;
         if (v.type == ValueType::FG) {
-            continue;
+            // If the location is leaving the mutable window now, and all other
+            // relevant locals are already recent/frozen, FG must hold now or it
+            // can never be satisfied later.
+            if (!stateModels(v.psi1, s)) return false;
         } else if (v.type == ValueType::F || v.type == ValueType::U) {
             if (v.type == ValueType::F) {
                 if (s.theta.find(id) == s.theta.end()) return false;
@@ -1009,9 +1024,10 @@ static void addLocFromInitial(Substate& s, int addLoc) {
     }
 }
 
-static void applyAction(Substate& next, const Substate& cur, const ActionInfo& action, int L) {
+static bool applyAction(Substate& next, const Substate& cur, const ActionInfo& action, int L) {
     next = cur;  // start from the current valuation and Theta
     bindState(cur.lv, cur.gv);
+    bool changed = false;
 
     const int mutableLeft = cur.i + 1;
     const int mutableRight = cur.i + 2 * L;
@@ -1037,10 +1053,18 @@ static void applyAction(Substate& next, const Substate& cur, const ActionInfo& a
                 const auto itLv = lv_key.find(prop);
                 if (itLv != lv_key.end()) {
                     const int key = itLv->second;
-                    next.lv[lKey_index[key]] = 0;
+                    const int idx = lKey_index[key];
+                    if (next.lv[idx] != 0) {
+                        next.lv[idx] = 0;
+                        changed = true;
+                    }
                 } else {
                     const int key = gv_key[prop];
-                    next.gv[gKey_index[key]] = 0;
+                    const int idx = gKey_index[key];
+                    if (next.gv[idx] != 0) {
+                        next.gv[idx] = 0;
+                        changed = true;
+                    }
                 }
             }
         }
@@ -1057,17 +1081,31 @@ static void applyAction(Substate& next, const Substate& cur, const ActionInfo& a
                 const auto itLv = lv_key.find(prop);
                 if (itLv != lv_key.end()) {
                     const int key = itLv->second;
-                    next.lv[lKey_index[key]] = 1;
+                    const int idx = lKey_index[key];
+                    if (next.lv[idx] != 1) {
+                        next.lv[idx] = 1;
+                        changed = true;
+                    }
                 } else {
                     const int key = gv_key[prop];
-                    next.gv[gKey_index[key]] = 1;
+                    const int idx = gKey_index[key];
+                    if (next.gv[idx] != 1) {
+                        next.gv[idx] = 1;
+                        changed = true;
+                    }
                 }
             }
         }
     }
 
     // Theta' is Theta plus any newly satisfied active F/U values.
+    const size_t thetaBefore = next.theta.size();
+    const size_t brokenBefore = next.u_broken.size();
     updateTheta(next, L);
+    if (next.theta.size() != thetaBefore || next.u_broken.size() != brokenBefore) {
+        changed = true;
+    }
+    return changed;
 }
 
 // Signature for visited(S) from the paper's algorithm.
@@ -1114,7 +1152,9 @@ static bool dfs(Substate& cur,
                 int maxIndex,
                 std::vector<std::string>& plan,
                 std::unordered_set<std::string>& visited) {
-    if (g_early_stop && g_no_fu) {
+    // For no-F/U instances, once all FG/G/non-temporal conditions hold in the
+    // current state, continuing with extra actions is unnecessary.
+    if (g_no_fu) {
         if (fullFGGOk(cur)) return true;
     }
 
@@ -1134,7 +1174,7 @@ static bool dfs(Substate& cur,
         for (const ActionInfo& action : actionsList) {
             if (!actionFitsInterval(action, cur.i, L)) continue;
             Substate next;
-            applyAction(next, cur, action, L);
+            if (!applyAction(next, cur, action, L)) continue;
             if (!checkAlwaysConstraints(next, L)) continue;
             if (!globalValid(next, L)) continue;
 

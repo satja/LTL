@@ -152,16 +152,16 @@ Additional example input:
 
 Use `benchmark.sh` to run the planner and two baselines with timeouts and produce a CSV.
 
-Example (planner under 10s, baselines under 30s):
+Example (equal 15s timeout for all approaches):
 
 ```bash
 ./benchmark.sh \
   --dir tests_systematic \
   --L 3 \
   --max-depth 160 \
-  --planner-timeout 10 \
-  --bf-timeout 30 \
-  --auto-timeout 30 \
+  --planner-timeout 15 \
+  --bf-timeout 15 \
+  --auto-timeout 15 \
   --out tests_systematic/benchmark.csv \
   --validate
 ```
@@ -182,13 +182,14 @@ Behavior:
 The checked-in benchmark and plots were generated with:
 
 ```bash
+./gen-systematic-tests --dir tests_systematic --n-min 6 --n-max 16 --per-n 10 --seed 20260127
 ./benchmark.sh \
   --dir tests_systematic \
   --L 3 \
   --max-depth 160 \
-  --planner-timeout 10 \
-  --bf-timeout 30 \
-  --auto-timeout 30 \
+  --planner-timeout 15 \
+  --bf-timeout 15 \
+  --auto-timeout 15 \
   --out tests_systematic/benchmark.csv \
   --validate
 python3 plot-benchmarks.py --csv tests_systematic/benchmark.csv
@@ -200,11 +201,11 @@ To keep plots in the paper figure directory:
 python3 plot-benchmarks.py --csv tests_systematic/benchmark.csv --out-dir figures
 ```
 
-On the full 190-case suite (validation enabled):
+On the full 110-case suite (validation enabled):
 
-- Locality planner successes: 84 / 190 (84 validated, 106 timeouts).
-- Automata baseline successes: 122 / 190 (122 validated, 68 timeouts).
-- Brute-force successes: 96 / 190 (96 validated, 94 timeouts).
+- Locality planner successes: 110 / 110 (all 110 validated).
+- Automata baseline successes: 85 / 110 (85 validated, 25 timeouts).
+- Brute-force successes: 79 / 110 (79 validated, 31 timeouts).
 
 These counts come directly from `tests_systematic/benchmark.csv`.
 Here, “success” means the planner exited with status `0` within the configured
@@ -212,34 +213,31 @@ timeout. With `--validate`, all successful outputs are also checked by
 `./validate`.
 
 Runtime summary (successful runs only):
-- Locality planner: mean 0.908s, median 0.06s, max 8.86s.
-- Automata baseline: mean 2.743s, median 0.16s, max 27.70s.
-- Brute force: mean 4.246s, median 0.61s, max 28.48s.
+- Locality planner: mean 0.046s, median 0.00s, max 0.35s.
+- Automata baseline: mean 0.706s, median 0.04s, max 10.10s.
+- Brute force: mean 1.981s, median 0.21s, max 14.57s.
 
 Mann-Whitney U tests using timeout-capped per-instance runtimes:
-- locality vs brute-force: `p = 1.13e-11`
-- locality vs automata/progression: `p = 0.0123`
+- locality vs brute-force: `p = 7.61e-26`
+- locality vs automata/progression: `p = 1.66e-13`
 
 ![Benchmark Runtime vs n](figures/benchmark-time-vs-n.png)
 ![Benchmark Runtime per Case](figures/benchmark-time-vs-case.png)
 
 ### Results Discussion
 
-The updated run shows a clear speed/completeness tradeoff across methods under
-the fixed timeout budget. Locality has the strongest successful-run speed
-(smallest mean and median), but the lowest completion rate on this full suite.
-The automata/progression baseline achieves the highest completion rate. The
-brute-force baseline sits between the two in completion, with the heaviest tail
-in runtime among solved instances.
+The updated run shows that the optimized locality planner is both fast and
+robust on this smaller systematic suite: it solved all instances within the
+same 15s timeout budget used for the baselines, with the lowest successful-run
+runtime profile.
 
 A practical reading of the comparison is:
 
-- Locality compression gives strong speed when it succeeds, but at `L=3` it is
-  not complete on many larger generated cases.
-- Automata/progression is more robust on this suite, at the cost of higher
-  runtime.
-- Brute-force is generally slower than locality and less robust than automata,
-  but solves substantially more cases than locality on this run.
+- Locality compression now dominates both in runtime and completion on this
+  benchmark configuration.
+- Automata/progression remains a strong baseline, but has many timeout-capped
+  cases at higher sizes.
+- Brute-force remains the slowest baseline and times out frequently.
 
 ### Plotting
 
