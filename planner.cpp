@@ -706,6 +706,7 @@ struct ActionInfo {
 
 std::vector<ActionInfo> actionsList;
 std::unordered_map<std::string, ActionInfo> actionInfoByName;
+static int actionPriority(const std::string& name);
 
 static void addLocToAction(ActionInfo& info, int loc) {
     if (loc <= 0) return;
@@ -779,8 +780,11 @@ static void buildActionInfo() {
         actionsList.push_back(info);
     }
 
-    // Make action iteration deterministic.
+    // Make action iteration deterministic with a small action-type bias.
     std::sort(actionsList.begin(), actionsList.end(), [](const ActionInfo& a, const ActionInfo& b) {
+        const int pa = actionPriority(a.name);
+        const int pb = actionPriority(b.name);
+        if (pa != pb) return pa < pb;
         return a.name < b.name;
     });
 }
@@ -808,6 +812,17 @@ static bool hasUValues() {
         if (v.type == ValueType::U) return true;
     }
     return false;
+}
+
+static int actionPriority(const std::string& name) {
+    if (name.empty()) return 100;
+    const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(name[0])));
+    // Traffic-domain heuristic: prefer constructive actions first.
+    if (c == 'h') return 0;
+    if (c == 'f') return 1;
+    if (c == 'c') return 2;
+    if (c == 'g') return 3;
+    return 10;
 }
 
 // ----- Substate search -----
@@ -1154,7 +1169,7 @@ static bool dfs(Substate& cur,
                 std::unordered_set<std::string>& visited) {
     // For no-F/U instances, once all FG/G/non-temporal conditions hold in the
     // current state, continuing with extra actions is unnecessary.
-    if (g_no_fu) {
+    if (g_early_stop && g_no_fu) {
         if (fullFGGOk(cur)) return true;
     }
 
