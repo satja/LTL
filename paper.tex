@@ -542,18 +542,22 @@ traffic light 4 drains the robot's battery.}\label{f2}
 \end{center}
 \end{figure}
 
-As depicted in Figure \ref{f2}, we expand the previous example by introducing charging stations between each pair of traffic lights. The charging stations allow the robot to recharge its battery. However, we want to avoid wasting battery charging cycles when it is not necessary, so we will disallow charging until the battery runs low due to major repair work. We introduce an action $c_i$ that fully charges the robot at the charging station located in front of the traffic light with the index $i$. If a proposition $charged_i$ denotes that this charger has been used, the described condition can be written as $\neg charged_i\ U\ lowBattery$.
+As depicted in Figure \ref{f2}, we expand the previous example by introducing charging stations between each pair of traffic lights. The charging stations allow the robot to recharge its battery. We model a maintenance policy in which one major repair drains the battery and exactly one recharge is expected afterward. Charging before the battery is low should be disallowed, and repeated charging after recovery should also be disallowed. We introduce an action $c_i$ that recharges the robot at the station located in front of traffic light $i$. Proposition $charged_i$ records which station was used, and global proposition $chargedOnce$ records whether a recharge has already happened.
 
 \noindent Formally, we have:
 \begin{equation}
 \begin{aligned}
-Loc &= \bigcup_{i=1}^{n} \{on_i,\ broken_i, charged_i\},\quad Glob = \{congestion, lowBattery\}, \\
+Loc &= \bigcup_{i=1}^{n} \{on_i,\ broken_i, charged_i\},\quad Glob = \{congestion, lowBattery, chargedOnce\}, \\
 \Omega &= \{FG on_i,\ i = 1,\dots, n\}\ \cup\ \{\neg charged_i\ U\ lowBattery,\ i = 1,\dots, n\} \\
-&\quad \cup\ \{G\neg congestion\}\ \cup\ \{FG\neg lowBattery\}.
+&\quad \cup\ \{FG chargedOnce\}\ \cup\ \{G\neg congestion\}\ \cup\ \{FG\neg lowBattery\}.
 \end{aligned}
 \end{equation}
-The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false and $charged_i$ is false for all $i$.
-We update the actions so that \begin{equation}\gamma^{-}(c_i,lowBattery) = \gamma^{+}(c_i, charged_i) = \top.\end{equation} Major repair work will include fixing traffic light $4$, thus $\gamma^{+}(f_4,lowBattery)  = \top$. Actions $f_i, g_i, h_i$ can be performed only if the battery is not low:
+The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false, $charged_i$ is false for all $i$, and $chargedOnce$ is false.
+We update the actions so that
+\begin{equation}
+\gamma^{-}(c_i,lowBattery)=\gamma^{+}(c_i, charged_i)=\gamma^{+}(c_i, chargedOnce)=lowBattery\wedge \neg chargedOnce.
+\end{equation}
+Thus, charging has an effect only when the battery is low and no prior charging event has occurred. Major repair work will include fixing traffic light $4$, thus $\gamma^{+}(f_4,lowBattery)  = \top$. Actions $f_i, g_i, h_i$ can be performed only if the battery is not low:
 \begin{equation}
 \begin{aligned}
 \gamma^-(f_i, broken_i)&=\gamma^+(f_i, on_i)=(\neg on_{i-1}\lor \neg on_{i+1})\wedge \neg lowBattery &&\text{for } 1<i<n,\\
@@ -590,28 +594,28 @@ Again, since each action affects at most three consecutive local propositions, w
 \text{move } \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_6, on_7, on_8\},\ \{lowBattery\}\}, \cup_{i=1}^{8}\{\neg  charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{perform } c_4 \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, charged_4, broken_5, on_6, on_7, on_8\},\ \emptyset\}, \cup_{i=1}^{8}\{\neg charged_i \; U \;  lowBattery\})
+\text{perform } c_4 \to \ & (2, \ \{\{on_1, on_2, on_3, on_4, charged_4, broken_5, on_6, on_7, on_8\},\ \{chargedOnce\}\}, \cup_{i=1}^{8}\{\neg charged_i \; U \;  lowBattery\})
 \end{split}
 \\\begin{split}
-\text{move } \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_6, on_7, on_8, on_9\},\ \emptyset\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
+\text{move } \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_6, on_7, on_8, on_9\},\ \{chargedOnce\}\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{perform } g_6 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_7, on_8, on_9\},\ \emptyset\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
+\text{perform } g_6 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, broken_5, on_7, on_8, on_9\},\ \{chargedOnce\}\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{perform } f_5 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, on_5, on_7, on_8, on_9\},\ \emptyset\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
+\text{perform } f_5 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, on_5, on_7, on_8, on_9\},\ \{chargedOnce\}\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{perform } h_6 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9\},\ \emptyset\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
+\text{perform } h_6 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9\},\ \{chargedOnce\}\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{move } \to \ & (4, \ \{\{on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9, on_{10}\},\ \emptyset\}, \cup_{i=2}^{10}\{\neg charged_i \; U \; lowBattery\})
+\text{move } \to \ & (4, \ \{\{on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9, on_{10}\},\ \{chargedOnce\}\}, \cup_{i=2}^{10}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
  \end{align*}
 \normalsize
 
 The last substate is indeed final since $i=n-2L$ and all active propositions are valid in the sense of Definitions \ref{gval} and
-\ref{lval}. For example, $FGon_7$ and $FG\neg lowBattery$ are true, while $\neg charged_7 \; U\; lowBattery$ does belong
+\ref{lval}. For example, $FGon_7$, $FG\neg lowBattery$, and $FG chargedOnce$ are true, while $\neg charged_7 \; U\; lowBattery$ does belong
 to $\Theta$. The validity of previous local propositions, such as $on_1$, has been verified as part of the "move" operation according
 to Definition \ref{g}, while the truth of $G \neg congestion$ was verified in each substate according to Definition \ref{invalid}.
 
