@@ -6,6 +6,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -237,9 +238,34 @@ static std::vector<int> make_service_indices(int n, int pattern_id) {
     return service;
 }
 
+static std::vector<int> make_blocked_indices(int n,
+                                             int pattern_id,
+                                             const std::vector<int>& service_indices) {
+    std::vector<int> blocked = make_pattern(n, pattern_id + 2);
+    std::unordered_set<int> service(service_indices.begin(), service_indices.end());
+    std::vector<int> out;
+    for (int idx : blocked) {
+        if (idx <= 1 || idx >= n) continue;      // keep start and final target reachable
+        if (service.count(idx)) continue;        // required service cells must stay repairable
+        out.push_back(idx);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    if (out.empty()) {
+        for (int idx = 2; idx <= n - 1; idx++) {
+            if (!service.count(idx)) {
+                out.push_back(idx);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 static void write_case_ex3(const fs::path& out_path,
                            int n,
-                           const std::vector<int>& service_indices) {
+                           const std::vector<int>& service_indices,
+                           const std::vector<int>& blocked_midlane) {
     std::ofstream out(out_path);
     if (!out) {
         std::cerr << "Failed to open " << out_path << " for writing\n";
@@ -247,41 +273,68 @@ static void write_case_ex3(const fs::path& out_path,
     }
 
     std::vector<std::string> locals;
-    locals.reserve(3 * n);
+    locals.reserve(7 * n);
     for (int i = 1; i <= n; i++) locals.push_back("ra" + std::to_string(i));
     for (int i = 1; i <= n; i++) locals.push_back("rb" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("rc" + std::to_string(i));
     for (int i = 1; i <= n; i++) locals.push_back("done" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("ha" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("hb" + std::to_string(i));
+    for (int i = 1; i <= n; i++) locals.push_back("hc" + std::to_string(i));
     out << join_csv(locals) << "\n";
     out << "collision\n";
 
-    std::vector<int> ra(n, 0), rb(n, 0), done(n, 0);
-    ra[0] = 1;
+    std::vector<int> ra(n, 0), rb(n, 0), rc(n, 0), done(n, 0), ha(n, 0), hb(n, 0), hc(n, 0);
+    rb[0] = 1;  // start at B1
+    for (int idx : blocked_midlane) {
+        if (idx >= 1 && idx <= n) hb[idx - 1] = 1;
+    }
 
     std::vector<int> local_vals;
-    local_vals.reserve(3 * n);
+    local_vals.reserve(7 * n);
     local_vals.insert(local_vals.end(), ra.begin(), ra.end());
     local_vals.insert(local_vals.end(), rb.begin(), rb.end());
+    local_vals.insert(local_vals.end(), rc.begin(), rc.end());
     local_vals.insert(local_vals.end(), done.begin(), done.end());
+    local_vals.insert(local_vals.end(), ha.begin(), ha.end());
+    local_vals.insert(local_vals.end(), hb.begin(), hb.end());
+    local_vals.insert(local_vals.end(), hc.begin(), hc.end());
     out << join_truths(local_vals) << "\n";
     out << "FALSE\n";
 
     for (int i = 1; i <= n - 1; i++) {
         out << "- mA" << i << " ra" << i << " : TRUE\n";
         out << "+ mA" << i << " ra" << (i + 1) << " : TRUE\n";
+        out << "+ mA" << i << " collision : ha" << (i + 1) << "\n";
 
         out << "- mB" << i << " rb" << i << " : TRUE\n";
         out << "+ mB" << i << " rb" << (i + 1) << " : TRUE\n";
+        out << "+ mB" << i << " collision : hb" << (i + 1) << "\n";
+
+        out << "- mC" << i << " rc" << i << " : TRUE\n";
+        out << "+ mC" << i << " rc" << (i + 1) << " : TRUE\n";
+        out << "+ mC" << i << " collision : hc" << (i + 1) << "\n";
     }
 
     for (int i = 1; i <= n; i++) {
         out << "- sAB" << i << " ra" << i << " : TRUE\n";
         out << "+ sAB" << i << " rb" << i << " : TRUE\n";
+        out << "+ sAB" << i << " collision : hb" << i << "\n";
 
         out << "- sBA" << i << " rb" << i << " : TRUE\n";
         out << "+ sBA" << i << " ra" << i << " : TRUE\n";
+        out << "+ sBA" << i << " collision : ha" << i << "\n";
 
-        out << "+ repA" << i << " done" << i << " : ra" << i << "\n";
-        out << "+ repB" << i << " done" << i << " : rb" << i << "\n";
+        out << "- sBC" << i << " rb" << i << " : TRUE\n";
+        out << "+ sBC" << i << " rc" << i << " : TRUE\n";
+        out << "+ sBC" << i << " collision : hc" << i << "\n";
+
+        out << "- sCB" << i << " rc" << i << " : TRUE\n";
+        out << "+ sCB" << i << " rb" << i << " : TRUE\n";
+        out << "+ sCB" << i << " collision : hb" << i << "\n";
+
+        out << "+ repB" << i << " done" << i << " : rb" << i << " AND (NOT (hb" << i << "))\n";
+        out << "+ repB" << i << " collision : rb" << i << " AND hb" << i << "\n";
     }
 
     for (int idx : service_indices) out << "l : ( FG (done" << idx << "))\n";
@@ -346,11 +399,12 @@ int main(int argc, char** argv) {
                 write_case_ex2(out_path, n, indices);
             } else {
                 std::vector<int> service = make_service_indices(n, pattern_id);
-                write_case_ex3(out_path, n, service);
+                std::vector<int> blocked = make_blocked_indices(n, pattern_id, service);
+                write_case_ex3(out_path, n, service, blocked);
                 indices = service;  // record service indices in manifest "broken=" field
             }
 
-            manifest << fname << " n=" << n << " broken=";
+            manifest << fname << " n=" << n << " indices=";
             for (size_t i = 0; i < indices.size(); i++) {
                 if (i) manifest << ",";
                 manifest << indices[i];

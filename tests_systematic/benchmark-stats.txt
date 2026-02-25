@@ -1,3 +1,0 @@
-Mann-Whitney U tests (alternative: locality time < baseline time)
-locality vs brute-force: U=1182.500, p=7.60672321023e-26
-locality vs automata: U=2707.000, p=1.66293763909e-13
