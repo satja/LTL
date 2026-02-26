@@ -99,8 +99,8 @@ Planner flags:
 With systematic tests:
 
 ```bash
-./planner --L 3 < tests_systematic/case-0.input-only.txt > tests_systematic/case-0.full.txt
-./validate < tests_systematic/case-0.full.txt
+./planner --L 3 < tests_systematic/case-0-ex1.input-only.txt > tests_systematic/case-0-ex1.paper.full.txt
+./validate < tests_systematic/case-0-ex1.paper.full.txt
 ```
 
 Notes:
@@ -110,7 +110,7 @@ Notes:
 ## 2) Test Generation: Systematic, Parameterized
 
 The generator `gen-systematic-tests.cpp` creates deterministic, size-ordered
-families of traffic-light-like instances with locality structure.
+benchmark instances across the three paper families.
 
 Build the generator:
 
@@ -125,16 +125,15 @@ Generate a systematic suite:
 ```
 
 What it generates:
-- A family of ring-structured instances indexed by `n`.
-- Local atoms per light: `on_i`, `broken_i`.
-- A global atom: `congestion`.
-- Transition rules (`gamma`) aligned with the planner/validator format.
-- Values typically include `F G on_i` (for each light) and `G !congestion`.
-- Broken-light patterns are chosen systematically (non-adjacent where possible).
+- Example 1: linear traffic lights with break/fix actions and congestion safety.
+- Example 2: chargers with `lowBattery` and `chargedOnce` policy constraints.
+- Example 3: three-lane production corridor with lane switches, service cells,
+  occupied crossings, and terminal target.
+- Deterministic pattern variation per size `n` and fixed family cycling.
 
 Files produced (per case):
 - `*.input-only.txt`: planner input.
-- `manifest.txt`: metadata with `n` and broken pattern per case.
+- `manifest.txt`: metadata with `n` and index pattern per case.
 
 Flag details for the generator live in `gen-systematic-tests.cpp`.
 
@@ -142,9 +141,9 @@ Deprecated random tests and the old generator live under `deprecated/`.
 
 Additional example input:
 
-- `ProblemDescriptionC.txt`: includes chargers (`charged_i`) and a `lowBattery`
-  proposition with explicit initial values. It exercises the `U` operator in
-  value formulas (e.g., `NOT(charged_i) U lowBattery`).
+- `ProblemDescriptionC.txt`: charger-domain example with `lowBattery` and
+  `chargedOnce`. It exercises `U` formulas such as
+  `NOT(charged_i) U lowBattery`.
 
 ## 3) Running Benchmarks and Generating Charts
 
@@ -177,7 +176,7 @@ Behavior:
   `0` means valid, `1` means invalid, `2` means skipped because the planner
   failed or timed out. Validation is not included in the timing.
 
-### Current Benchmark Snapshot (February 25, 2026)
+### Current Benchmark Snapshot (February 26, 2026)
 
 The checked-in benchmark and plots were generated with:
 
@@ -204,8 +203,8 @@ python3 plot-benchmarks.py --csv tests_systematic/benchmark.csv --out-dir figure
 On the full 110-case suite (validation enabled):
 
 - Locality planner successes: 110 / 110 (all 110 validated).
-- Automata baseline successes: 100 / 110 (100 validated, 10 timeouts).
-- Brute-force successes: 89 / 110 (89 validated, 21 timeouts).
+- Automata baseline successes: 105 / 110 (105 validated, 5 timeouts).
+- Brute-force successes: 90 / 110 (90 validated, 20 timeouts).
 
 These counts come directly from `tests_systematic/benchmark.csv`.
 Here, “success” means the planner exited with status `0` within the configured
@@ -213,13 +212,13 @@ timeout. With `--validate`, all successful outputs are also checked by
 `./validate`.
 
 Runtime summary (successful runs only):
-- Locality planner: mean 0.041s, median 0.00s, max 0.33s.
-- Automata baseline: mean 0.280s, median 0.03s, max 9.93s.
-- Brute force: mean 1.283s, median 0.18s, max 11.79s.
+- Locality planner: mean 0.018s, median 0.00s, max 0.12s.
+- Automata baseline: mean 0.572s, median 0.03s, max 12.05s.
+- Brute force: mean 1.576s, median 0.25s, max 13.81s.
 
 Mann-Whitney U tests using timeout-capped per-instance runtimes:
-- locality vs brute-force: `p = 7.71e-27`
-- locality vs automata/progression: `p = 6.57e-12`
+- locality vs brute-force: `p = 1.86e-31`
+- locality vs automata/progression: `p = 3.90e-14`
 
 ![Benchmark Runtime vs n](figures/benchmark-time-vs-n.png)
 ![Benchmark Runtime per Case](figures/benchmark-time-vs-case.png)
@@ -235,10 +234,9 @@ A practical reading of the comparison is:
 
 - Locality compression dominates in runtime and remains complete on the full
   suite.
-- Automata/progression is robust overall, with failures concentrated in the
-  charging family.
-- Brute-force improves relative to earlier runs but still has the highest
-  timeout count among the three methods.
+- Automata/progression is robust overall, with remaining failures concentrated
+  in the charging family.
+- Brute-force still has the highest timeout count among the three methods.
 
 ### Plotting
 

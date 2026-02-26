@@ -180,53 +180,62 @@ static void write_case_ex2(const fs::path& out_path,
         std::exit(1);
     }
 
-    std::vector<int> on_vals(n, 1), broken_vals(n, 0), charged_vals(n, 0);
+    const int charger_n = std::max(1, n - 1);
+    std::vector<int> on_vals(n, 1), broken_vals(n, 0), charged_vals(charger_n, 0);
     for (int idx : broken_indices) {
         on_vals[idx - 1] = 0;
         broken_vals[idx - 1] = 1;
     }
 
     std::vector<std::string> locals;
-    locals.reserve(3 * n);
+    locals.reserve(2 * n + charger_n);
     for (int i = 1; i <= n; i++) locals.push_back("on" + std::to_string(i));
     for (int i = 1; i <= n; i++) locals.push_back("broken" + std::to_string(i));
-    for (int i = 1; i <= n; i++) locals.push_back("charged" + std::to_string(i));
+    for (int i = 1; i <= charger_n; i++) locals.push_back("charged" + std::to_string(i));
     out << join_csv(locals) << "\n";
-    out << "congestion\n";
+    out << "congestion, lowBattery, chargedOnce\n";
 
     std::vector<int> local_vals;
-    local_vals.reserve(3 * n);
+    local_vals.reserve(2 * n + charger_n);
     local_vals.insert(local_vals.end(), on_vals.begin(), on_vals.end());
     local_vals.insert(local_vals.end(), broken_vals.begin(), broken_vals.end());
     local_vals.insert(local_vals.end(), charged_vals.begin(), charged_vals.end());
     out << join_truths(local_vals) << "\n";
-    out << "FALSE\n";
+    out << "FALSE, FALSE, FALSE\n";
+
+    const int heavy = (n >= 5) ? 4 : std::max(1, std::min(charger_n, n / 2));
 
     for (int i = 2; i <= n - 1; i++) {
         const std::string cond_or =
             "NOT (on" + std::to_string(i - 1) + ") OR (NOT (on" + std::to_string(i + 1) + "))";
         const std::string cond_and =
             "NOT (on" + std::to_string(i - 1) + ") AND (NOT (on" + std::to_string(i + 1) + "))";
-        out << "- f" << i << " broken" << i << " : " << cond_or << "\n";
-        out << "+ f" << i << " on" << i << " : " << cond_or << "\n";
+        const std::string cond_or_batt = "(" + cond_or + ") AND (NOT (lowBattery))";
+        out << "- f" << i << " broken" << i << " : " << cond_or_batt << "\n";
+        out << "+ f" << i << " on" << i << " : " << cond_or_batt << "\n";
         out << "+ f" << i << " congestion : " << cond_and << "\n";
     }
-    out << "- f1 broken1 : TRUE\n";
-    out << "- f" << n << " broken" << n << " : TRUE\n";
-    out << "+ f1 on1 : TRUE\n";
-    out << "+ f" << n << " on" << n << " : TRUE\n";
+    out << "- f1 broken1 : NOT (lowBattery)\n";
+    out << "- f" << n << " broken" << n << " : NOT (lowBattery)\n";
+    out << "+ f1 on1 : NOT (lowBattery)\n";
+    out << "+ f" << n << " on" << n << " : NOT (lowBattery)\n";
+    out << "+ f" << heavy << " lowBattery : TRUE\n";
 
-    for (int i = 1; i <= n; i++) out << "- g" << i << " on" << i << " : TRUE\n";
-    for (int i = 1; i <= n; i++) out << "+ h" << i << " on" << i << " : NOT (broken" << i << ")\n";
+    for (int i = 1; i <= n; i++) out << "- g" << i << " on" << i << " : NOT (lowBattery)\n";
+    for (int i = 1; i <= n; i++) out << "+ h" << i << " on" << i << " : NOT (broken" << i << ") AND (NOT (lowBattery))\n";
 
-    for (int i = 1; i <= n; i++) {
-        out << "+ c" << i << " charged" << i << " : TRUE\n";
+    for (int i = 1; i <= charger_n; i++) {
+        const std::string cond_charge = "lowBattery AND (NOT (chargedOnce))";
+        out << "- c" << i << " lowBattery : " << cond_charge << "\n";
+        out << "+ c" << i << " charged" << i << " : " << cond_charge << "\n";
+        out << "+ c" << i << " chargedOnce : " << cond_charge << "\n";
     }
 
     for (int i = 1; i <= n; i++) out << "l : ( FG (on" << i << "))\n";
-    const int heavy = std::clamp(4, 1, n);
-    out << "l : ( FG (charged" << heavy << "))\n";
+    for (int i = 1; i <= charger_n; i++) out << "l : NOT (charged" << i << ") U lowBattery\n";
     out << "g : ( G ( NOT (congestion)))\n";
+    out << "g : ( FG (chargedOnce))\n";
+    out << "g : ( FG ( NOT (lowBattery)))\n";
 }
 
 static std::vector<int> make_service_indices(int n, int pattern_id) {
@@ -399,6 +408,13 @@ int main(int argc, char** argv) {
             if (fam == Family::Ex1Traffic) {
                 write_case_ex1(out_path, n, indices);
             } else if (fam == Family::Ex2Chargers) {
+                const int charger_n = std::max(1, n - 1);
+                const int heavy = (n >= 5) ? 4 : std::max(1, std::min(charger_n, n / 2));
+                if (std::find(indices.begin(), indices.end(), heavy) == indices.end()) {
+                    indices.push_back(heavy);
+                }
+                std::sort(indices.begin(), indices.end());
+                indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
                 write_case_ex2(out_path, n, indices);
             } else {
                 std::vector<int> service = make_service_indices(n, pattern_id);

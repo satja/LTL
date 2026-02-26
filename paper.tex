@@ -542,18 +542,18 @@ traffic light 4 drains the robot's battery.}\label{f2}
 \end{center}
 \end{figure}
 
-As depicted in Figure \ref{f2}, we expand the previous example by introducing charging stations between each pair of traffic lights. The charging stations allow the robot to recharge its battery. We model a maintenance policy in which one major repair drains the battery and exactly one recharge is expected afterward. Charging before the battery is low should be disallowed, and repeated charging after recovery should also be disallowed. We introduce an action $c_i$ that recharges the robot at the station located in front of traffic light $i$. Proposition $charged_i$ records which station was used, and global proposition $chargedOnce$ records whether a recharge has already happened.
+As depicted in Figure \ref{f2}, we expand the previous example by introducing charging stations between each pair of traffic lights. The charging stations allow the robot to recharge its battery. We model a maintenance policy in which one major repair drains the battery and exactly one recharge is expected afterward. Charging before the battery is low should be disallowed, and repeated charging after recovery should also be disallowed. We introduce an action $c_i$ for $i=1,\dots,n-1$ that recharges the robot at the station between traffic lights $i$ and $i+1$. Proposition $charged_i$ records which station was used, and global proposition $chargedOnce$ records whether a recharge has already happened.
 
 \noindent Formally, we have:
 \begin{equation}
 \begin{aligned}
-Loc &= \bigcup_{i=1}^{n} \{on_i,\ broken_i, charged_i\},\quad Glob = \{congestion, lowBattery, chargedOnce\}, \\
-\Omega &= \{FG on_i,\ i = 1,\dots, n\}\ \cup\ \{\neg charged_i\ U\ lowBattery,\ i = 1,\dots, n\} \\
+Loc &= \bigcup_{i=1}^{n} \{on_i,\ broken_i\}\ \cup\ \bigcup_{i=1}^{n-1}\{charged_i\},\quad Glob = \{congestion, lowBattery, chargedOnce\}, \\
+\Omega &= \{FG on_i,\ i = 1,\dots, n\}\ \cup\ \{\neg charged_i\ U\ lowBattery,\ i = 1,\dots, n-1\} \\
 &\quad \cup\ \{FG chargedOnce\}\ \cup\ \{G\neg congestion\}\ \cup\ \{FG\neg lowBattery\}.
 \end{aligned}
 \end{equation}
-The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false, $charged_i$ is false for all $i$, and $chargedOnce$ is false.
-We update the actions so that
+The initial state is the same as in Example \ref{ex1}, extended with battery-related propositions: $lowBattery$ is false, $charged_i$ is false for $i=1,\dots,n-1$, and $chargedOnce$ is false.
+We update the actions so that, for $i=1,\dots,n-1$,
 \begin{equation}
 \gamma^{-}(c_i,lowBattery)=\gamma^{+}(c_i, charged_i)=\gamma^{+}(c_i, chargedOnce)=lowBattery\wedge \neg chargedOnce.
 \end{equation}
@@ -609,7 +609,7 @@ Again, since each action affects at most three consecutive local propositions, w
 \text{perform } h_6 \to \ & (3, \ \{\{on_1, on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9\},\ \{chargedOnce\}\}, \cup_{i=1}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
 \\\begin{split}
-\text{move } \to \ & (4, \ \{\{on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9, on_{10}\},\ \{chargedOnce\}\}, \cup_{i=2}^{10}\{\neg charged_i \; U \; lowBattery\})
+\text{move } \to \ & (4, \ \{\{on_2, on_3, on_4, on_5, on_6, on_7, on_8, on_9, on_{10}\},\ \{chargedOnce\}\}, \cup_{i=2}^{9}\{\neg charged_i \; U \; lowBattery\})
 \end{split}
  \end{align*}
 \normalsize
@@ -641,11 +641,11 @@ This keeps the "long" direction explicit, while the lane index is absorbed into 
 Formally,
 \begin{equation}
 \begin{aligned}
-Loc = \bigcup_{i=1}^n \{robot_{i,y}, broken_{i,y}, done_{i,y}, human_{i,y}: y=1,\dots,W\},\\
+Loc = \bigcup_{i=1}^n \{robot_{i,y}, done_{i,y}, human_{i,y}: y=1,\dots,W\},\\
 Glob=\{collision\}.
 \end{aligned}
 \end{equation}
-Hence each location $i$ has at most $4W$ local propositions, so $M=4W$ is constant when $W$ is fixed.
+Hence each location $i$ has at most $3W$ local propositions, so $M=3W$ is constant when $W$ is fixed.
 
 Let $R\subseteq \{1,\dots,n\}\times\{1,\dots,W\}$ be the set of stations that must be serviced.
 The value set is
@@ -663,19 +663,21 @@ We use three action families:
 Representative effects are:
 \begin{equation}
 \begin{aligned}
-\gamma^-(m_{i,y},robot_{i,y})&=\gamma^+(m_{i,y},robot_{i+1,y})=\top,\\
-\gamma^+(m_{i,y},collision)&=human_{i+1,y}.
+\gamma^-(m_{i,y},robot_{i,y})&=robot_{i,y},\\
+\gamma^+(m_{i,y},robot_{i+1,y})&=robot_{i,y},\\
+\gamma^+(m_{i,y},collision)&=robot_{i,y}\land human_{i+1,y}.
 \end{aligned}
 \end{equation}
 \begin{equation}
 \begin{aligned}
-\gamma^-(s_{i,y\to y'},robot_{i,y})&=\gamma^+(s_{i,y\to y'},robot_{i,y'})=\top,\\
-\gamma^+(s_{i,y\to y'},collision)&=human_{i,y'}.
+\gamma^-(s_{i,y\to y'},robot_{i,y})&=robot_{i,y},\\
+\gamma^+(s_{i,y\to y'},robot_{i,y'})&=robot_{i,y},\\
+\gamma^+(s_{i,y\to y'},collision)&=robot_{i,y}\land human_{i,y'}.
 \end{aligned}
 \end{equation}
 \begin{equation}
 \begin{aligned}
-\gamma^-(rep_{i,y},broken_{i,y})&=\gamma^+(rep_{i,y},done_{i,y})=robot_{i,y}\land \neg human_{i,y},\\
+\gamma^+(rep_{i,y},done_{i,y})&=robot_{i,y}\land \neg human_{i,y},\\
 \gamma^+(rep_{i,y},collision)&=robot_{i,y}\land human_{i,y}.
 \end{aligned}
 \end{equation}
@@ -702,15 +704,15 @@ This section evaluates whether the theoretical locality advantage translates int
 
 All experiments were run on an Intel Core i7-10510U (4 cores / 8 threads) machine with 31\,GiB RAM, Ubuntu Linux kernel 5.15, and C++17 implementations compiled with \texttt{g++ 9.4.0} using optimization level \texttt{-O2}.
 
-The benchmark set consists of 110 systematically generated instances with problem size $n\in[6,16]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial pattern variation per size: damaged-location patterns in Example 1 and Example 2, and service/occupied-cell patterns in Example 3. Family assignment follows a fixed cyclic pattern over variants, yielding 44 instances from the linear traffic-light family (Example 1), 33 from the charging extension (Example 2), and 33 from the three-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
+The benchmark set consists of 110 systematically generated instances with problem size $n\in[6,16]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial pattern variation per size: damaged-location patterns in Example 1 and Example 2, and service/occupied-cell patterns in Example 3. Each family is generated from the same action/value definitions used in its corresponding example subsection, including the one-charge policy in Example 2 and the source-conditioned lane/move effects in Example 3. Family assignment follows a fixed cyclic pattern over variants, yielding 44 instances from the linear traffic-light family (Example 1), 33 from the charging extension (Example 2), and 33 from the three-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
 
-All methods are run with the same maximum search depth (160) and evaluated per instance under equal fixed runtime limits of 15 seconds per planner. The locality parameter is fixed at $L=3$, matching the locality structure of the benchmark family. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. Reported planning times exclude validation time, so runtime values represent planner-only cost.
+All methods are run with the same maximum search depth (160) and evaluated per instance under equal fixed runtime limits of 15 seconds per planner. The locality parameter is fixed at $L=3$, matching the largest locality width among the benchmark families. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. Reported planning times exclude validation time, so runtime values represent planner-only cost.
 
 \subsection{Results}
 
-Table \ref{t:eval} summarizes success counts and runtime statistics on the full 110-instance suite. The locality-based planner solves all 110 instances within the 15-second limit, and all 110 successful outputs are validated. The automata/progression baseline solves 100 instances and times out on 10, with all 100 successful outputs validated. The brute-force baseline solves 89 instances and times out on 21, with all 89 successful outputs validated. Runtime statistics are computed over successful runs only: the locality planner has mean runtime 0.041s, median 0.00s, and maximum 0.33s; the automata/progression baseline has mean 0.280s, median 0.03s, and maximum 9.93s; and the brute-force baseline has mean 1.283s, median 0.18s, and maximum 11.79s.
+Table \ref{t:eval} summarizes success counts and runtime statistics on the full 110-instance suite. The locality-based planner solves all 110 instances within the 15-second limit, and all 110 successful outputs are validated. The automata/progression baseline solves 105 instances and times out on 5, with all 105 successful outputs validated. The brute-force baseline solves 90 instances and times out on 20, with all 90 successful outputs validated. Runtime statistics are computed over successful runs only: the locality planner has mean runtime 0.018s, median 0.00s, and maximum 0.12s; the automata/progression baseline has mean 0.572s, median 0.03s, and maximum 12.05s; and the brute-force baseline has mean 1.576s, median 0.25s, and maximum 13.81s.
 
-To test whether the runtime advantage is statistically significant at the distribution level, we apply one-sided Mann--Whitney U tests with alternative hypothesis that locality runtimes are smaller than baseline runtimes. Using per-instance planner times (including timeout-capped values), we obtain $p=7.71\times 10^{-27}$ for locality versus brute force and $p=6.57\times 10^{-12}$ for locality versus automata/progression. Under this equal-timeout setting, locality is significantly faster than both baselines in the capped per-instance distribution.
+To test whether the runtime advantage is statistically significant at the distribution level, we apply one-sided Mann--Whitney U tests with alternative hypothesis that locality runtimes are smaller than baseline runtimes. Using per-instance planner times (including timeout-capped values), we obtain $p=1.86\times 10^{-31}$ for locality versus brute force and $p=3.90\times 10^{-14}$ for locality versus automata/progression. Under this equal-timeout setting, locality is significantly faster than both baselines in the capped per-instance distribution.
 Because all three methods use the same 15-second timeout cap, the rank-based comparison does not depend on asymmetric censoring thresholds.
 
 \begin{table}[ht!]
@@ -721,14 +723,14 @@ Because all three methods use the same 15-second timeout cap, the rank-based com
 \toprule
 Method & Success & Timeout & Mean (s) & Median (s) & Max (s) \\
 \midrule
-Locality-based planner & 110/110 & 0 & 0.041 & 0.00 & 0.33 \\
-Automata/progression baseline & 100/110 & 10 & 0.280 & 0.03 & 9.93 \\
-Brute-force baseline & 89/110 & 21 & 1.283 & 0.18 & 11.79 \\
+Locality-based planner & 110/110 & 0 & 0.018 & 0.00 & 0.12 \\
+Automata/progression baseline & 105/110 & 5 & 0.572 & 0.03 & 12.05 \\
+Brute-force baseline & 90/110 & 20 & 1.576 & 0.25 & 13.81 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-To make the cross-example effect explicit, Table \ref{t:eval-families} reports success counts separately for the three benchmark families. The locality planner remains complete in each family under the common 15-second cap. The automata/progression baseline is complete on Example 1 and Example 3, and loses robustness on Example 2. Brute force times out on a subset of Example 1 and on more than half of Example 2, while remaining complete on Example 3 in this suite.
+To make the cross-example effect explicit, Table \ref{t:eval-families} reports success counts separately for the three benchmark families. The locality planner remains complete in each family under the common 15-second cap. The automata/progression baseline is complete on Example 1 and Example 3, and loses robustness on Example 2. Brute force times out on a subset of Example 1 and on roughly half of Example 2, while remaining complete on Example 3 in this suite.
 
 \begin{table}[ht!]
 \centering
@@ -739,7 +741,7 @@ To make the cross-example effect explicit, Table \ref{t:eval-families} reports s
 Family & Locality-based & Automata/progression & Brute-force \\
 \midrule
 Example 1 (linear traffic lights, 44 instances) & 44/44 & 44/44 & 41/44 \\
-Example 2 (charging extension, 33 instances) & 33/33 & 23/33 & 15/33 \\
+Example 2 (charging extension, 33 instances) & 33/33 & 28/33 & 16/33 \\
 Example 3 (three-lane corridor, 33 instances) & 33/33 & 33/33 & 33/33 \\
 \bottomrule
 \end{tabular}
@@ -768,7 +770,7 @@ Example 3 (three-lane corridor, 33 instances) & 33/33 & 33/33 & 33/33 \\
 The central empirical observation is that locality-aware state compression dominates in this benchmark regime. Under the fixed setting $L=3$ and a common 15-second budget, the locality planner solves all instances and has the lowest runtime distribution. This matters because the three families stress different parts of the model: the first emphasizes local repair propagation with global congestion safety, the second adds charging-related propositions and additional temporal obligations, and the third introduces lane switches and collision-avoidance structure in a narrow two-dimensional geometry.
 Figure \ref{f3} provides the aggregate view by number of intersections using robust summary statistics: for each method, the median runtime grows with $n$, and the dashed bands show the interquartile range. Figure \ref{f3local} complements this by isolating only the locality planner. This view confirms that locality runtime remains low across the full size range, including larger instances in the suite.
 
-The baseline behavior is heterogeneous by family, which helps explain aggregate statistics. On Example 1, locality and automata/progression are both complete, while brute force loses robustness on a small subset. On Example 2, locality is complete, automata/progression times out on a substantial subset, and brute force times out on more than half of instances. On Example 3, all three methods are complete under the 15-second budget, but locality still maintains the lowest runtime distribution.
+The baseline behavior is heterogeneous by family, which helps explain aggregate statistics. On Example 1, locality and automata/progression are both complete, while brute force loses robustness on a small subset. On Example 2, locality is complete, automata/progression times out on a nontrivial subset, and brute force times out on roughly half of instances. On Example 3, all three methods are complete under the 15-second budget, but locality still maintains the lowest runtime distribution.
 
 These results are consistent with the theory from Section \ref{pa}. The proposed method keeps only a bounded active window of local propositions, together with global propositions and compact temporal-status memory, and shifts this window left-to-right. In this locality-structured benchmark, that representation yields both strong pruning and low per-state overhead, which explains the observed runtime and completion advantage. The automata/progression baseline, by construction, explores product states that combine planning valuations with residual temporal formulas, and this temporal-monitor overhead is most visible in the charger family where temporal obligations are denser. The brute-force baseline suffers most from direct state-space growth, despite online pruning.
 
