@@ -689,8 +689,8 @@ For the concrete three-lane encoding ($A,B,C$), these schemas ground to the inpu
 \gamma^+(mC_i,collision)=rc_i\land hc_{i+1},\\
 \gamma^+(sAB_i,collision)&=ra_i\land hb_i,\quad
 \gamma^+(sBA_i,collision)=rb_i\land ha_i,\quad
-\gamma^+(sBC_i,collision)=rb_i\land hc_i,\quad
-\gamma^+(sCB_i,collision)=rc_i\land hb_i.
+\gamma^+(sBC_i,collision)=rb_i\land hc_i,\\
+\gamma^+(sCB_i,collision)&=rc_i\land hb_i.
 \end{aligned}
 \end{equation}
 Likewise, movement effects are source-conditioned (e.g., $\gamma^-(mA_i,ra_i)=ra_i$ and $\gamma^+(mA_i,ra_{i+1})=ra_i$), which exactly matches rules such as ``\texttt{+ mA1 collision : ra1 AND ha2}'' in the instantiated specification.
@@ -760,7 +760,7 @@ Example 3 (three-lane corridor, 33 instances) & 33/33 & 33/33 & 33/33 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
+\begin{figure}[ht!]
 \begin{center}
 \includegraphics[width=0.82\textwidth]{figures/benchmark-time-median-iqr-vs-n.png}
 \caption{Runtime versus instance size $n$ with ten instances per size. Solid lines show median runtime for each method and dashed side lines show the first and third quartiles (IQR band).}
@@ -769,7 +769,7 @@ Example 3 (three-lane corridor, 33 instances) & 33/33 & 33/33 & 33/33 \\
 \end{center}
 \end{figure}
 
-\begin{figure}[H]
+\begin{figure}[ht!]
 \begin{center}
 \includegraphics[width=0.82\textwidth]{figures/benchmark-time-locality.png}
 \caption{Locality-only runtime detail. The left panel shows all locality runs grouped by $n$ with the mean trend, and the right panel shows the same runs by case index. Isolating this method reveals its internal growth pattern that is visually compressed in the multi-method comparison.}
