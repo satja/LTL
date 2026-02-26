@@ -681,6 +681,19 @@ Representative effects are:
 \gamma^+(rep_{i,y},collision)&=robot_{i,y}\land human_{i,y}.
 \end{aligned}
 \end{equation}
+For the concrete three-lane encoding ($A,B,C$), these schemas ground to the input rules. In particular, collision updates include
+\begin{equation}
+\begin{aligned}
+\gamma^+(mA_i,collision)&=ra_i\land ha_{i+1},\quad
+\gamma^+(mB_i,collision)=rb_i\land hb_{i+1},\quad
+\gamma^+(mC_i,collision)=rc_i\land hc_{i+1},\\
+\gamma^+(sAB_i,collision)&=ra_i\land hb_i,\quad
+\gamma^+(sBA_i,collision)=rb_i\land ha_i,\quad
+\gamma^+(sBC_i,collision)=rb_i\land hc_i,\quad
+\gamma^+(sCB_i,collision)=rc_i\land hb_i.
+\end{aligned}
+\end{equation}
+Likewise, movement effects are source-conditioned (e.g., $\gamma^-(mA_i,ra_i)=ra_i$ and $\gamma^+(mA_i,ra_{i+1})=ra_i$), which exactly matches rules such as ``\texttt{+ mA1 collision : ra1 AND ha2}'' in the instantiated specification.
 All other effects are $\bot$. In this model, move actions touch only columns $i$ and $i+1$, lane changes and repairs touch only column $i$, and all of them may touch one global proposition ($collision$). Therefore $r(a)-l(a)\le 1$ for all actions, so the locality requirement is satisfied for $L=2$.
 
 For the concrete instance from Figure \ref{f-ex3}, let $n=12$, $W=3$, $R=\{(3,2),(7,2),(9,2)\}$, and let the initial robot position be $(1,2)$.
