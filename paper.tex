@@ -24,6 +24,16 @@
 \newtheorem{Theorem}{Theorem}
 \newtheorem{Definition}{Definition}
 
+\makeatletter
+\AtBeginDocument{%
+  \fancyfoot[RO,LE]{}%
+  \fancypagestyle{firstpagestyle}{%
+    \fancyhf{}%
+    \fancyfoot[RO,LE]{}%
+  }%
+}
+\makeatother
+
 \setcopyright{cc}
 \copyrightyear{2025}
 \acmDOI{10.1613/jair.1.xxxxx}
@@ -31,10 +41,6 @@
 %%
 \JAIRAE{Insert JAIR AE Name}
 \JAIRTrack{} % Insert JAIR Track Name only if part of a special track
-\acmVolume{4}
-\acmArticle{6}
-\acmMonth{8}
-\acmYear{2025}
 
 \RequirePackage[
   datamodel=acmdatamodel,
