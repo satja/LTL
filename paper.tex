@@ -491,25 +491,24 @@ number of edges is equivalent to minimizing the number of Type~1 edges, and henc
 of actions in the resulting plan.
 
 It follows that one may replace the depth-first search in Algorithm \ref{a:alg} by a
-breadth-first search. Equivalently, one may use a $0$--$1$ shortest-path algorithm with the
+breadth-first search. Equivalently, one may use a 0-1 BFS algorithm with the
 above edge costs.
 
 \begin{Theorem}\label{t:shortest}
-If there exists a satisfactory plan, then breadth-first search on $\mathcal{G}$ returns a
+    If there exists a satisfactory plan, then breadth-first search (BFS) on $\mathcal{G}$ returns a
 satisfactory plan with the minimum number of actions.
 \end{Theorem}
 
 \begin{proof}{}
-Breadth-first search returns a path from $S_0$ to a final vertex with the minimum number of
-edges. As observed above, every such path contains the same number $n-2L$ of Type~2 edges.
-Hence a minimum-edge successful path is also a path with the minimum number of Type~1 edges.
-Extracting the actions from its Type~1 edges therefore yields a satisfactory plan of minimum
-length.
+BFS returns a path from $S_0$ to a final vertex with the minimum number of
+edges. As observed above, every such path contains the same number ($n-2L$) of Type~2 edges.
+Therefore, a minimum-edge successful path is also a path with the minimum number of Type~1 edges.
+Extracting the actions from its Type~1 edges yields a satisfactory plan of minimum length.
 \end{proof}
 
-The computational complexity remains polynomial. In particular, replacing depth-first search by
-breadth-first search does not change the asymptotic bound stated above, although breadth-first
-search may require more memory in practice.
+The computational complexity remains polynomial. In particular, replacing DFS by BFS
+does not change the asymptotic bound stated above, although BFS may require more memory in practice,
+and is slower in cases where DFS finds a successful path without much backtracking.
 
 \subsection{Best-Effort Optimization and Lexicographic Refinement}\label{softopt}
 
