@@ -112,11 +112,11 @@
 \begin{abstract}
 \textbf{Objective:} We study the CONFLICT problem in logic-based ethical planning with Linear Temporal Logic (LTL) values, which is PSPACE-complete in general, and target a tractable fragment relevant to structured robotic domains.
 
-\textbf{Method:} We introduce locality assumptions over propositions and actions: most propositions are indexed along an ordered local axis, each action depends on and modifies only a bounded interval, the number of global propositions is constant, and locality also constrains feasible temporal action order. Under these assumptions, we derive a polynomial-time locality-based planning algorithm.
+\textbf{Method:} We introduce locality assumptions over propositions and actions: most propositions are indexed along an ordered local axis, each action depends on and modifies only a bounded interval, the number of global propositions is constant, and locality also constrains feasible temporal action order. Under these assumptions, we derive a polynomial-time locality-based planning algorithm and show how the same substate graph supports shortest satisfactory planning and weighted conflict resolution.
 
-\textbf{Results:} We evaluate against brute-force and automata/progression baselines on a deterministic 110-instance benchmark suite spanning three modeled robotic families (linear traffic lights, charging extension, and narrow three-lane corridor). With a common 15-second timeout and independent validation, the locality planner solves 110/110 instances, while automata/progression solves 105/110 and brute force 90/110. The locality method also has the lowest runtime distribution and significantly smaller per-instance runtimes in one-sided Mann--Whitney U tests.
+\textbf{Results:} We evaluate against brute-force and automata/progression baselines on a deterministic 110-instance benchmark suite spanning three modeled robotic families (linear traffic lights, charging extension, and narrow three-lane corridor). With a common 15-second timeout and independent validation, the locality planner solves 110/110 instances, while automata/progression solves 105/110 and brute force 90/110. The locality method also has the lowest runtime distribution and significantly smaller per-instance runtimes in one-sided Mann--Whitney U tests. The shortest-plan extension remains complete while reducing mean plan length from 47.44 to 7.80 actions, and the conflict-resolution extension solves a derived contradictory suite with the optimal unit penalty on all 110 instances.
 
-\textbf{Conclusion:} Locality-aware state compression yields a practically robust and fast exact planner in high-locality domains, while retaining expressive temporal value constraints.
+\textbf{Conclusion:} Locality-aware state compression yields a practically robust and fast exact planner in high-locality domains, while retaining expressive temporal value constraints. The same representation also supports practical shortest-plan and minimum-violation variants without leaving the locality-based polynomial framework.
 \end{abstract}
 
 %\begin{abstract}
@@ -151,12 +151,13 @@ A set of moral values $\Omega$ consists of LTL formulas \cite{4567924} that desc
 
 
 Grandi et al. \cite{grandi2022logic} have shown that several planning tasks are intractable (PSPACE-complete). Namely, CONFLICT is shown to be PSPACE-complete using reduction from the propositional STRIPS planning problem called PLANSAT \cite{BYLANDER1994165}. The difficulty of the problem arises from the exponential number of possible plans.
-Using additional assumptions at the cost of generality, we define a constrained version of the CONFLICT problem and present the algorithm to solve it. Namely, to enable polynomial complexity, we restrict actions to affect only a local set of propositions, introducing the {\it locality} assumption. 
+Using additional assumptions at the cost of generality, we define a constrained version of the CONFLICT problem and present algorithms to solve it. Namely, to enable polynomial complexity, we restrict actions to affect only a local set of propositions, introducing the {\it locality} assumption. 
 
 The proposed framework allows modelling many real-world scenarios involving planning. One example includes utilizing propositions to express properties involving linear space order. Many robots involved in repairs or manufacturing adhere to such constraints (e.g. robots used to pick and pack food in the factories, gantry robots used in automotive industry, robots dispatching pallets in the warehouses, robots in electronic chip manufacturing or pharmaceutical production). Utilizing proposed logic, these robots could move back and forth satisfying expressive, complex constraints. One important constraint is not to harm human workers that might cross the path of the traversing robots. This shows the importance of having the possibility to add moral constraints in the planning process  to create safe, flexible and efficient robots.    
-To complement the theoretical analysis, we perform an empirical comparison against brute-force and automata/progression baselines on systematic instances derived from the three examples in this paper, reporting both runtime and completion behavior under equal timeout budgets.
 
-The paper is organized as follows. Sect. \ref{related} describes the related work. In Sect. \ref{lbp} we describe the framework and the proposed algorithm. In Sect. \ref{example} we present examples. Sect. \ref{eval} reports benchmark-based evaluation. Conclusions are given in Sect. \ref{conc}.
+Our contribution is threefold. First, we show that under the locality assumptions the strict CONFLICT problem becomes polynomial-time solvable. Second, we show that the same locality-based substate graph can be reused to compute shortest satisfactory plans and weighted minimum-violation plans. Third, we validate these claims empirically on systematic benchmarks derived from three robotic examples. On the 110-instance strict suite, the locality planner solves all instances and outperforms brute-force and automata/progression baselines in runtime, while the shortest-plan variant remains complete and substantially reduces plan length. On a derived contradictory suite, the conflict-resolution variant returns optimal unit-penalty plans on all instances.
+
+The paper is organized as follows. Sect. \ref{related} describes the related work. In Sect. \ref{lbp} we describe the framework and the proposed locality-based algorithms. In Sect. \ref{example} we present examples. Sect. \ref{eval} reports the empirical evaluation of the strict, shortest-plan, and conflict-resolution variants. Conclusions are given in Sect. \ref{conc}.
 \section{Related Work}\label{related}
 
 Logic-based temporal planning has previously been studied in the context of robotics and autonomous systems. Various approaches have been used to address uncertainty, efficiency, and fairness in decision-making. Significant focus has been on using LTL, as well as probabilistic temporal logic \cite{konur2011realtimeprobabilistictemporallogics}, to define and schedule complex tasks in dynamic and uncertain environments. 
@@ -493,7 +494,7 @@ of actions in the resulting plan.
 
 It follows that one may replace the depth-first search in Algorithm \ref{a:alg} by a
 breadth-first search on the unweighted graph $\mathcal{G}$. 
-Equivalently, one may use a 0-1 BFS algorithm on a weighted graph with the above edge costs.
+Equivalently, one may use a 0-1 BFS algorithm on a weighted graph with the above edge costs; in this setting it yields the same optimum because every successful path contains the same number of Type~2 edges.
 
 \begin{Theorem}\label{t:shortest}
     If there exists a satisfactory plan, then breadth-first search (BFS) on $\mathcal{G}$ returns a
@@ -544,7 +545,7 @@ is determined only in the final substate. Minimizing
 over all paths from the initial vertex to a final vertex $S_f$ is therefore equivalent to
 minimizing the total weight violation. If we add an additional vertex $S_F$ and add an edge from each final vertex $S_f$ to
 the additional vertex $S_F$ with the weight $\lambda(e)=\tau(S_f)$, then the shortest path from $S_0$ to $S_F$ in terms of
-Eq. \eqref{lam} corresponds to the mimimum total weight violation, or equivalently, maximization the total satisfied weight.
+Eq. \eqref{lam} corresponds to the minimum total weight violation, or equivalently, maximization of the total satisfied weight.
 
 Since all weights are nonnegative, this problem can be solved by a shortest-path
 algorithm such as Dijkstra's algorithm, which is polynomial in the size of $\mathcal{G}^{\star}$. 
@@ -817,7 +818,7 @@ This example is two-dimensional in geometry, but remains one-dimensional in loca
 
 \section{Evaluation}\label{eval}
 
-This section evaluates whether the theoretical locality advantage translates into practical runtime gains. We compare three planners under a common protocol: the proposed locality-based planner, a brute-force planner with online value pruning, and an automata/progression $LTL_f$ baseline. The automata/progression baseline follows the standard finite-trace temporal-logic approach in which search is performed on a product between planning states and temporal-monitor states \cite{degiacomo2013ltlf,camacho2018finite}; operationally, each value formula is represented by a residual formula that is progressed after each action. In all experiments, every produced plan is checked by an independent validator, so correctness is not inferred from internal planner state.
+This section evaluates whether the theoretical locality advantage translates into practical runtime gains. We first compare three planners under a common protocol for the strict satisfiability problem: the proposed locality-based planner, a brute-force planner with online value pruning, and an automata/progression $LTL_f$ baseline. The automata/progression baseline follows the standard finite-trace temporal-logic approach in which search is performed on a product between planning states and temporal-monitor states \cite{degiacomo2013ltlf,camacho2018finite}; operationally, each value formula is represented by a residual formula that is progressed after each action. We then evaluate the shortest satisfactory-plan and conflict-resolution locality variants introduced in Sections \ref{sp} and \ref{softopt}. In the strict experiments, every produced plan is checked by an independent validator, so correctness is not inferred from internal planner state.
 
 \subsection{Setup}
 
@@ -826,7 +827,9 @@ Code, benchmark-generation scripts, and experiment artifacts are available at \u
 
 The benchmark set consists of 110 systematically generated instances with problem size $n\in[6,16]$ and ten instances per size. The generation procedure is deterministic and size-ordered, with nontrivial pattern variation per size: damaged-location patterns in Example 1 and Example 2, and service/occupied-cell patterns in Example 3. Each family is generated from the same action/value definitions used in its corresponding example subsection, including the one-charge policy in Example 2 and the source-conditioned lane/move effects in Example 3. Family assignment follows a fixed cyclic pattern over variants, yielding 44 instances from the linear traffic-light family (Example 1), 33 from the charging extension (Example 2), and 33 from the three-lane repair corridor (Example 3). This design provides controlled growth in instance size while preserving the locality assumptions studied in Section \ref{aa}, while also testing whether conclusions remain stable across all three modeling variants rather than only one. In the plots, this means that for each fixed $n$ there are exactly ten benchmark instances.
 
-All methods are run with the same maximum search depth (160) and evaluated per instance under equal fixed runtime limits of 15 seconds per planner. The locality parameter is fixed at $L=3$, matching the largest locality width among the benchmark families. Example \ref{ex3} itself already satisfies locality for $L=2$, but we keep a single fixed $L$ across all families for direct comparability. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. Reported planning times exclude validation time, so runtime values represent planner-only cost.
+To evaluate the extensions from Sections \ref{sp} and \ref{softopt}, we use two additional protocols on top of the main benchmark. For shortest satisfactory plans, we run the default locality planner and the shortest-plan locality variant on the same 110-instance suite and compare both runtime and produced plan length. For conflict resolution, we derive a second 110-instance suite by appending one contradictory value to each benchmark instance: $FG\,\neg on_1$ in Example 1, $FG\,\neg chargedOnce$ in Example 2, and $FG\,\neg rb_n$ in Example 3, where $rb_n$ denotes the terminal delivery location of the corridor instance. These added values make the strict problem unsatisfiable while preserving the same transition structure. In the soft experiment all value weights are set to $1$, and among plans with equal total violation the implementation breaks ties by action count.
+
+All methods are run with the same maximum search depth (160) and evaluated per instance under equal fixed runtime limits of 15 seconds per planner. The locality parameter is fixed at $L=3$, matching the largest locality width among the benchmark families. Example \ref{ex3} itself already satisfies locality for $L=2$, but we keep a single fixed $L$ across all families for direct comparability. A run is counted as successful only if a planner returns a plan within the time limit and that plan is accepted by independent validation. For the strict planners, validation is performed by the standalone validator used throughout the paper. For the soft conflict-resolution variant, which is allowed to violate some values, we instead use an independent scorer that replays the returned plan and recomputes the final numbers of satisfied and violated values. Reported planning times exclude validation and scoring time, so runtime values represent planner-only cost.
 
 \subsection{Results}
 
@@ -867,6 +870,40 @@ Example 3 (three-lane corridor, 33 instances) & 33/33 & 33/33 & 33/33 \\
 \end{tabular}
 \end{table}
 
+The shortest satisfactory-plan variant remains complete on the same 110 strict benchmark instances, with all returned plans accepted by the independent validator. Its runtime increases relative to the default depth-first version, as expected from the broader frontier exploration, but it substantially improves plan quality in terms of action count. Over the full suite, the mean plan length drops from $47.44$ actions for the default locality planner to $7.80$ actions for the shortest-plan variant; the corresponding medians are $14$ and $6$. The shortest-plan result is strictly shorter on $62$ instances and equal on the remaining $48$, with no case in which it is longer. The improvement is concentrated in the charger family, where the default DFS often finds long detours before reaching a satisfactory branch, while the corridor family already has tightly constrained route structure and therefore shows no length difference. The conflict-resolution planner, when run on the original satisfiable suite, returns zero-penalty plans on all 110 instances and, under the implementation's secondary action-count tie-break, coincides with the shortest-plan output on this benchmark.
+
+\begin{table}[ht!]
+\centering
+\caption{Locality-based variants on the original 110-instance suite. Runtime statistics are computed over successful runs only, and plan-length statistics refer to the returned action sequence.}
+\label{t:eval-variants}
+\begin{tabular}{lcccccc}
+\toprule
+Method & Success & Mean (s) & Median (s) & Max (s) & Mean length & Median length \\
+\midrule
+Default locality planner & 110/110 & 0.019 & 0.00 & 0.13 & 47.44 & 14 \\
+Shortest-plan locality & 110/110 & 0.056 & 0.01 & 0.55 & 7.80 & 6 \\
+Conflict-resolution locality & 110/110 & 0.042 & 0.01 & 0.39 & 7.80 & 6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The conflict-resolution experiment highlights the difference between the strict and soft formulations. On the derived contradictory suite, both strict locality variants correctly report that no satisfactory plan exists in all 110 cases. The conflict-resolution planner, by contrast, solves all 110 instances within the same 15-second limit. The independent scorer agrees with the planner on every case and reports penalty $1$ throughout, which is exactly the optimum under unit weights because each derived instance differs from the original one by a single contradictory value. Runtime remains low overall, with mean $0.268$s, median $0.03$s, and maximum $3.25$s. The charger family is again the hardest, but even there the worst case remains far below the timeout.
+
+\begin{table}[ht!]
+\centering
+\caption{Conflict-resolution experiment on the derived contradictory 110-instance suite with unit value weights.}
+\label{t:eval-soft}
+\begin{tabular}{lcccccc}
+\toprule
+Method & Success & Mean (s) & Median (s) & Max (s) & Mean penalty & Mean length \\
+\midrule
+Default locality planner & 0/110 & -- & -- & -- & -- & -- \\
+Shortest-plan locality & 0/110 & -- & -- & -- & -- & -- \\
+Conflict-resolution locality & 110/110 & 0.268 & 0.03 & 3.25 & 1.00 & 7.76 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \begin{figure}[ht!]
 \begin{center}
 \includegraphics[width=0.82\textwidth]{figures/benchmark-time-median-iqr-vs-n.png}
@@ -892,16 +929,19 @@ Figure \ref{f3} provides the aggregate view by number of intersections using rob
 
 The baseline behavior is heterogeneous by family, which helps explain aggregate statistics. On Example 1, locality and automata/progression are both complete, while brute force loses robustness on a small subset. On Example 2, locality is complete, automata/progression times out on a nontrivial subset, and brute force times out on roughly half of instances. On Example 3, all three methods are complete under the 15-second budget, but locality still maintains the lowest runtime distribution.
 
+The extension experiments refine this picture rather than changing it. The shortest-plan variant shows that the locality representation is not tied to arbitrarily long DFS outputs: the same substate graph supports complete shortest-plan search with moderate runtime overhead. The length reduction is especially strong in the charger family, where the default DFS can wander through many locally admissible but globally unnecessary actions before closing the temporal obligations. By contrast, the corridor family already has a narrow feasible route structure, so the shortest-plan and default outputs coincide there. The soft experiment shows that the same locality representation also remains useful once strict satisfiability is dropped. On the contradictory suite, the strict planners fail exactly as they should, while the conflict-resolution variant still returns minimum-violation plans quickly and with penalties independently confirmed by the external scorer.
+
 These results are consistent with the theory from Section \ref{pa}. The proposed method keeps only a bounded active window of local propositions, together with global propositions and compact temporal-status memory, and shifts this window left-to-right. In this locality-structured benchmark, that representation yields both strong pruning and low per-state overhead, which explains the observed runtime and completion advantage. The automata/progression baseline, by construction, explores product states that combine planning valuations with residual temporal formulas, and this temporal-monitor overhead is most visible in the charger family where temporal obligations are denser. The brute-force baseline suffers most from direct state-space growth, despite online pruning.
 
 At the same time, interpretation should remain scoped to the evaluated regime. All three families are locality-structured by design and therefore aligned with the assumptions of our algorithm. This is appropriate for validating the intended use case and stronger than evaluating only one family, but it is still not evidence that the same margins will hold on domains with weak locality or substantially different temporal-value distributions. %A broader study with additional non-local families, parameter sweeps over $L$, and cross-platform timing would provide a stronger estimate of external validity.
 
 \section{Conclusion}\label{conc}
 
-We introduced a locality-based approach to solving the CONFLICT problem in ethical planning using Linear Temporal Logic (LTL). By incorporating assumptions on the structure of the problem, the distinction between global and local propositions and the constraints on the scope and sequence of actions, we were able to reduce the complexity of the problem from PSPACE-complete to polynomial time. The introduced concept of localized planning restricts the actions to only affect and depend on propositions within a bounded interval. It incorporates constraints on the temporal order of actions based on this interval. Due to possibility of large constant factors in the algorithm complexity, there might be a tradeoff between efficiency and flexibility. We consider the proposed algorithm to be practical   for real-world applications with small values of constants $K$, $L$, and $M$, ie, the applications with "high locality".
-The evaluation in Section \ref{eval} supports this claim by showing both runtime and robustness advantages on the systematic locality-structured benchmark suite.
+We introduced a locality-based approach to solving the CONFLICT problem in ethical planning using Linear Temporal Logic (LTL). By incorporating assumptions on the structure of the problem, the distinction between global and local propositions, and the constraints on the scope and sequence of actions, we reduce the strict satisfiability problem from PSPACE-complete to polynomial time on the considered fragment. The resulting representation keeps only a bounded active window of local propositions together with compact temporal bookkeeping, which makes exact planning practical in domains with high locality.
 
-Overall, our work offers a promising direction for efficient and scalable ethical planning in autonomous systems and robotics. By constraining the problem space in a principled way, we enable the development of action plans that adhere to predefined values, ensuring ethical behavior in complex, dynamic environments. Future research could explore extending this framework to accommodate more complex moral structures and larger sets of global propositions, as well as applying these methods to real-world robotic systems and other automated decision-making contexts.
+We also showed that the same locality-based substate graph supports two natural extensions. Replacing depth-first search by shortest-path search yields shortest satisfactory plans, and augmenting substates with constant-size value-status information yields a polynomial conflict-resolution procedure for fixed $M$, $L$, and $K$. Empirically, these extensions remain practical on the same benchmark regime. On the 110-instance strict suite, the locality planner solves all instances and outperforms the considered baselines in runtime, while the shortest-plan variant remains complete and reduces mean plan length from $47.44$ to $7.80$ actions. On the derived contradictory suite, the conflict-resolution variant solves all instances and returns the optimal unit penalty in every case.
+
+Overall, the results suggest that locality is not only a complexity-theoretic restriction but also a useful design principle for expressive temporal-value planning in structured robotic domains. Future work could study richer weighting schemes for conflict resolution, broader benchmark families with weaker locality, and applications to real robotic systems where the tradeoff between planning time and plan quality matters directly.
 
 
 %\begin{acks}

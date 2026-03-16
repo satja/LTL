@@ -69,6 +69,7 @@ g++ -std=c++17 -O2 -Wall -Wextra -pedantic planner.cpp -o planner
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic bruteforce-planner.cpp -o bruteforce-planner
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic ltlf-progress-planner.cpp -o ltlf-progress-planner
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic validate.cpp -o validate
+g++ -std=c++17 -O2 -Wall -Wextra -pedantic score-plan.cpp -o score-plan
 ```
 
 Single-line build:
@@ -77,7 +78,8 @@ Single-line build:
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic planner.cpp -o planner && \
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic bruteforce-planner.cpp -o bruteforce-planner && \
 g++ -std=c++17 -O2 -Wall -Wextra -pedantic ltlf-progress-planner.cpp -o ltlf-progress-planner && \
-g++ -std=c++17 -O2 -Wall -Wextra -pedantic validate.cpp -o validate
+g++ -std=c++17 -O2 -Wall -Wextra -pedantic validate.cpp -o validate && \
+g++ -std=c++17 -O2 -Wall -Wextra -pedantic score-plan.cpp -o score-plan
 ```
 
 Use model-only inputs as planner input, and the full format as validator input.
@@ -96,9 +98,20 @@ Main example inputs in the project root:
 
 Planner flags:
 - `--L L`: locality parameter (default 3).
+- `--mode MODE`: one of `arbitrary`, `shortest`, or `conflict`.
 - `--early-stop`: if there are no `F`/`U` values, stop as soon as all `FG`/`G`
   (and non-temporal) values hold in the full current state. This can shorten
   plans but does not change correctness.
+
+Examples:
+
+```bash
+./planner --L 3 --mode shortest < example1-linear.txt > planned.shortest.full.txt
+./validate < planned.shortest.full.txt
+
+./planner --L 3 --mode conflict < example1-linear.txt > planned.conflict.full.txt
+./score-plan < planned.conflict.full.txt
+```
 
 With systematic tests:
 
@@ -180,6 +193,45 @@ Behavior:
   `0` means valid, `1` means invalid, `2` means skipped because the planner
   failed or timed out. Validation is not included in the timing.
 
+### Locality Variants
+
+Use `benchmark-locality-variants.sh` to benchmark the three locality-based modes:
+default DFS (`arbitrary`), shortest satisfactory plans (`shortest`), and
+minimum-violation planning (`conflict`).
+
+Original strict suite:
+
+```bash
+./benchmark-locality-variants.sh \
+  --dir tests_systematic \
+  --L 3 \
+  --max-depth 160 \
+  --timeout 15 \
+  --out tests_systematic/locality-variants.csv \
+  --validate \
+  --score-conflict
+```
+
+Derived conflicting suite:
+
+```bash
+./make-conflict-suite.py --in-dir tests_systematic --out-dir tests_systematic_conflict
+./benchmark-locality-variants.sh \
+  --dir tests_systematic_conflict \
+  --L 3 \
+  --max-depth 160 \
+  --timeout 15 \
+  --out tests_systematic_conflict/locality-variants.csv \
+  --score-conflict
+```
+
+Summaries:
+
+```bash
+python3 summarize-locality-variants.py --csv tests_systematic/locality-variants.csv
+python3 summarize-locality-variants.py --csv tests_systematic_conflict/locality-variants.csv
+```
+
 ### Current Benchmark Snapshot (February 26, 2026)
 
 The checked-in benchmark and plots were generated with:
@@ -233,6 +285,27 @@ The updated run shows that the optimized locality planner is both fast and
 robust on this systematic suite: it solved all instances within the same 15s
 timeout budget used for the baselines, with the lowest successful-run runtime
 profile.
+
+### Locality-Variant Snapshot (March 16, 2026)
+
+On the original 110-instance suite:
+
+- Default locality planner: `110/110`, mean time `0.019s`, median `0.00s`, max `0.13s`, mean plan length `47.44`.
+- Shortest-plan locality: `110/110`, mean time `0.056s`, median `0.01s`, max `0.55s`, mean plan length `7.80`.
+- Conflict-resolution locality: `110/110`, mean time `0.042s`, median `0.01s`, max `0.39s`, mean plan length `7.80`, penalty `0` on all cases.
+
+The shortest-plan variant is strictly shorter on `62/110` cases and never longer.
+Its largest effect is on the charger family, where mean plan length drops from
+`133.27` to `5.88`.
+
+On the derived contradictory 110-instance suite:
+
+- Default locality planner: `0/110`.
+- Shortest-plan locality: `0/110`.
+- Conflict-resolution locality: `110/110`, mean time `0.268s`, median `0.03s`, max `3.25s`, mean plan length `7.76`.
+
+For the conflicting suite, the external scorer agrees with the planner on all
+cases and reports penalty `1` throughout.
 
 A practical reading of the comparison is:
 

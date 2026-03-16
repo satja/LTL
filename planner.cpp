@@ -1,10 +1,14 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <deque>
 #include <iostream>
+#include <limits>
 #include <optional>
+#include <queue>
 #include <set>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -595,6 +599,8 @@ static bool g_no_fu = false;
 static bool g_has_u = false;
 static int g_max_depth = 160;  // max number of actions in synthesized plan
 
+enum class PlannerMode { Arbitrary, Shortest, Conflict };
+
 // Split on a top-level " U " token (depth 0), if present.
 static std::optional<std::pair<std::string, std::string>> splitTopLevelU(const std::string& s) {
     int depth = 0;
@@ -1125,7 +1131,7 @@ static bool applyAction(Substate& next, const Substate& cur, const ActionInfo& a
 }
 
 // Signature for visited(S) from the paper's algorithm.
-static std::string signature(const Substate& s, int L) {
+static std::string signature(const Substate& s, int /*L*/) {
     std::string out;
     out.reserve(256);
     auto appendInt = [&](int v) {
@@ -1157,6 +1163,287 @@ static std::string signature(const Substate& s, int L) {
     for (int id : brokenSorted) appendInt(id);
 
     return out;
+}
+
+struct WorldState {
+    int i = 0;
+    std::vector<int> lv;
+    std::vector<int> gv;
+};
+
+enum class SoftStatus : unsigned char { Open = 0, Satisfied = 1, Lost = 2 };
+
+struct SoftState {
+    WorldState world;
+    std::vector<SoftStatus> sigma;
+};
+
+struct PlanResult {
+    std::vector<std::string> plan;
+    int penalty = 0;
+    int satisfied = 0;
+    int lost = 0;
+};
+
+struct SoftCost {
+    int penalty = std::numeric_limits<int>::max();
+    int actions = std::numeric_limits<int>::max();
+};
+
+static bool operator==(const SoftCost& a, const SoftCost& b) {
+    return a.penalty == b.penalty && a.actions == b.actions;
+}
+
+static bool operator!=(const SoftCost& a, const SoftCost& b) { return !(a == b); }
+
+static bool operator<(const SoftCost& a, const SoftCost& b) {
+    if (a.penalty != b.penalty) return a.penalty < b.penalty;
+    return a.actions < b.actions;
+}
+
+static SoftCost addCost(const SoftCost& a, int penaltyInc, int actionInc) {
+    return {a.penalty + penaltyInc, a.actions + actionInc};
+}
+
+static bool stateModels(formula* psi, const WorldState& s) {
+    assert(psi != nullptr);
+    bindState(s.lv, s.gv);
+    return psi->evaluate() == 1;
+}
+
+static void addLocFromInitial(WorldState& s, int addLoc) {
+    if (addLoc <= 0 || addLoc > nLoc) return;
+    const auto itKeys = loc_keys.find(addLoc);
+    if (itKeys == loc_keys.end()) return;
+    for (int key : itKeys->second) {
+        const int idx = lKey_index[key];
+        assert(idx >= 0 && idx < static_cast<int>(initial_lv_values.size()));
+        s.lv[idx] = initial_lv_values[idx];
+    }
+}
+
+static bool applyWorldAction(WorldState& next, const WorldState& cur, const ActionInfo& action, int L) {
+    next = cur;
+    bindState(cur.lv, cur.gv);
+    bool changed = false;
+
+    const int mutableLeft = cur.i + 1;
+    const int mutableRight = cur.i + 2 * L;
+
+    auto canAffect = [&](const std::string& prop) {
+        const auto itLv = lv_key.find(prop);
+        if (itLv != lv_key.end()) {
+            const int loc = key_loc[itLv->second];
+            return loc >= mutableLeft && loc <= mutableRight;
+        }
+        return true;
+    };
+
+    const auto minusIt = gammaMinus.find(action.name);
+    if (minusIt != gammaMinus.end()) {
+        for (const auto& entry : minusIt->second) {
+            const std::string& prop = entry.first;
+            if (!canAffect(prop)) continue;
+            formula* f = entry.second;
+            assert(f != nullptr);
+            if (f->evaluate() == 1) {
+                const auto itLv = lv_key.find(prop);
+                if (itLv != lv_key.end()) {
+                    const int key = itLv->second;
+                    const int idx = lKey_index[key];
+                    if (next.lv[idx] != 0) {
+                        next.lv[idx] = 0;
+                        changed = true;
+                    }
+                } else {
+                    const int key = gv_key[prop];
+                    const int idx = gKey_index[key];
+                    if (next.gv[idx] != 0) {
+                        next.gv[idx] = 0;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    const auto plusIt = gammaPlus.find(action.name);
+    if (plusIt != gammaPlus.end()) {
+        for (const auto& entry : plusIt->second) {
+            const std::string& prop = entry.first;
+            if (!canAffect(prop)) continue;
+            formula* f = entry.second;
+            assert(f != nullptr);
+            if (f->evaluate() == 1) {
+                const auto itLv = lv_key.find(prop);
+                if (itLv != lv_key.end()) {
+                    const int key = itLv->second;
+                    const int idx = lKey_index[key];
+                    if (next.lv[idx] != 1) {
+                        next.lv[idx] = 1;
+                        changed = true;
+                    }
+                } else {
+                    const int key = gv_key[prop];
+                    const int idx = gKey_index[key];
+                    if (next.gv[idx] != 1) {
+                        next.gv[idx] = 1;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+static std::string worldSignature(const WorldState& s) {
+    std::string out;
+    out.reserve(256);
+    auto appendInt = [&](int v) {
+        out.append(std::to_string(v));
+        out.push_back(',');
+    };
+
+    appendInt(s.i);
+    appendInt(static_cast<int>(s.lv.size()));
+    for (int v : s.lv) appendInt(v);
+    appendInt(static_cast<int>(s.gv.size()));
+    for (int v : s.gv) appendInt(v);
+    return out;
+}
+
+static std::string softSignature(const SoftState& s) {
+    std::string out = worldSignature(s.world);
+    for (SoftStatus status : s.sigma) {
+        out.push_back(static_cast<char>('0' + static_cast<int>(status)));
+    }
+    return out;
+}
+
+static bool localsFrozenNoGlobals(const Value& v, int i) {
+    if (v.has_global || v.local_locs.empty()) return false;
+    return v.local_locs.back() <= i;
+}
+
+static int advanceSoftStatuses(SoftState& s) {
+    int penalty = 0;
+
+    for (const Value& v : values) {
+        if (s.sigma[v.id] != SoftStatus::Open) continue;
+
+        const bool psi1True = (v.psi1 != nullptr) && stateModels(v.psi1, s.world);
+        const bool psi2True = (v.psi2 != nullptr) && stateModels(v.psi2, s.world);
+
+        if (v.type == ValueType::F) {
+            if (psi1True) {
+                s.sigma[v.id] = SoftStatus::Satisfied;
+            }
+        } else if (v.type == ValueType::U) {
+            if (psi2True) {
+                s.sigma[v.id] = SoftStatus::Satisfied;
+            } else if (!psi1True) {
+                s.sigma[v.id] = SoftStatus::Lost;
+                penalty += 1;
+            }
+        } else if (v.type == ValueType::G) {
+            if (!psi1True) {
+                s.sigma[v.id] = SoftStatus::Lost;
+                penalty += 1;
+            }
+        }
+    }
+
+    for (const Value& v : values) {
+        if (s.sigma[v.id] != SoftStatus::Open) continue;
+        if (!localsFrozenNoGlobals(v, s.world.i)) continue;
+
+        const bool psi1True = (v.psi1 != nullptr) && stateModels(v.psi1, s.world);
+        const bool psi2True = (v.psi2 != nullptr) && stateModels(v.psi2, s.world);
+
+        if (v.type == ValueType::FG) {
+            s.sigma[v.id] = psi1True ? SoftStatus::Satisfied : SoftStatus::Lost;
+            if (!psi1True) penalty += 1;
+        } else if (v.type == ValueType::F) {
+            s.sigma[v.id] = psi1True ? SoftStatus::Satisfied : SoftStatus::Lost;
+            if (!psi1True) penalty += 1;
+        } else if (v.type == ValueType::U) {
+            s.sigma[v.id] = psi2True ? SoftStatus::Satisfied : SoftStatus::Lost;
+            if (!psi2True) penalty += 1;
+        } else if (v.type == ValueType::G) {
+            s.sigma[v.id] = SoftStatus::Satisfied;
+        } else {
+            s.sigma[v.id] = psi1True ? SoftStatus::Satisfied : SoftStatus::Lost;
+            if (!psi1True) penalty += 1;
+        }
+    }
+
+    return penalty;
+}
+
+struct SoftTerminalSummary {
+    int penalty = 0;
+    int satisfied = 0;
+    int lost = 0;
+};
+
+static SoftTerminalSummary finalizeSoftState(const SoftState& s) {
+    SoftTerminalSummary summary;
+    std::vector<SoftStatus> sigma = s.sigma;
+
+    for (const Value& v : values) {
+        if (sigma[v.id] == SoftStatus::Satisfied) {
+            summary.satisfied++;
+            continue;
+        }
+        if (sigma[v.id] == SoftStatus::Lost) {
+            summary.lost++;
+            continue;
+        }
+
+        const bool psi1True = (v.psi1 != nullptr) && stateModels(v.psi1, s.world);
+        const bool psi2True = (v.psi2 != nullptr) && stateModels(v.psi2, s.world);
+        bool ok = false;
+        if (v.type == ValueType::F) {
+            ok = psi1True;
+        } else if (v.type == ValueType::U) {
+            ok = psi2True;
+        } else if (v.type == ValueType::G) {
+            ok = true;
+        } else if (v.type == ValueType::FG || v.type == ValueType::OTHER) {
+            ok = psi1True;
+        }
+
+        if (ok) {
+            summary.satisfied++;
+        } else {
+            summary.penalty += 1;
+            summary.lost++;
+        }
+    }
+
+    return summary;
+}
+
+struct ParentInfo {
+    std::string prev_sig;
+    std::string action;
+};
+
+static std::vector<std::string> reconstructPlan(const std::string& goal_sig,
+                                                const std::unordered_map<std::string, ParentInfo>& parent) {
+    std::vector<std::string> rev;
+    std::string sig = goal_sig;
+    while (true) {
+        const auto it = parent.find(sig);
+        if (it == parent.end()) break;
+        if (it->second.prev_sig.empty()) break;
+        if (!it->second.action.empty()) rev.push_back(it->second.action);
+        sig = it->second.prev_sig;
+    }
+    std::reverse(rev.begin(), rev.end());
+    return rev;
 }
 
 /*
@@ -1245,7 +1532,7 @@ static bool dfs(Substate& cur,
     return false;
 }
 
-static bool synthesizePlan(int L, std::vector<std::string>& plan) {
+static bool synthesizeArbitraryPlan(int L, PlanResult& result) {
     const int maxIndex = std::max(0, nLoc - 2 * L);
 
     // Initial substate S0 from Definition 3 (i=0, T from s0, Theta from s0).
@@ -1256,17 +1543,225 @@ static bool synthesizePlan(int L, std::vector<std::string>& plan) {
     updateTheta(initial, L);
 
     if (!checkAlwaysConstraints(initial, L) || !globalValid(initial, L)) {
-        plan.clear();
+        result = {};
         return false;
     }
 
     std::unordered_set<std::string> visited;
+    std::vector<std::string> plan;
     Substate cur = initial;
     const bool found = dfs(cur, L, maxIndex, plan, visited);
     if (!found) {
-        plan.clear();
+        result = {};
     }
+    result.plan = std::move(plan);
+    result.satisfied = static_cast<int>(values.size());
     return found;
+}
+
+static bool synthesizeShortestPlan(int L, PlanResult& result) {
+    const int maxIndex = std::max(0, nLoc - 2 * L);
+
+    Substate initial;
+    initial.i = 0;
+    initial.lv = initial_lv_values;
+    initial.gv = initial_gv_values;
+    updateTheta(initial, L);
+
+    if (!checkAlwaysConstraints(initial, L) || !globalValid(initial, L)) {
+        result = {};
+        return false;
+    }
+
+    struct QueueEntry {
+        int actions = 0;
+        std::string sig;
+        Substate state;
+    };
+
+    std::deque<QueueEntry> dq;
+    std::unordered_map<std::string, int> dist;
+    std::unordered_map<std::string, ParentInfo> parent;
+
+    const std::string initialSig = signature(initial, L);
+    dq.push_front({0, initialSig, initial});
+    dist[initialSig] = 0;
+    parent[initialSig] = {"", ""};
+
+    while (!dq.empty()) {
+        QueueEntry cur = std::move(dq.front());
+        dq.pop_front();
+        const auto itDist = dist.find(cur.sig);
+        if (itDist == dist.end() || itDist->second != cur.actions) continue;
+
+        if (g_early_stop && g_no_fu && fullFGGOk(cur.state)) {
+            result.plan = reconstructPlan(cur.sig, parent);
+            result.satisfied = static_cast<int>(values.size());
+            return true;
+        }
+
+        if (cur.state.i == maxIndex) {
+            Substate tmp = cur.state;
+            if (finalValid(tmp, L)) {
+                result.plan = reconstructPlan(cur.sig, parent);
+                result.satisfied = static_cast<int>(values.size());
+                return true;
+            }
+        }
+
+        if (cur.state.i < maxIndex) {
+            const int targetLoc = cur.state.i + 1;
+            if (localLocValid(cur.state, targetLoc, L)) {
+                Substate next = cur.state;
+                next.i = cur.state.i + 1;
+                const int dropLoc = next.i - L;
+                const int addLoc = next.i + 2 * L;
+                dropLocFromTheta(next, dropLoc);
+                addLocFromInitial(next, addLoc);
+                updateTheta(next, L);
+                if (checkAlwaysConstraints(next, L) && globalValid(next, L)) {
+                    const std::string nextSig = signature(next, L);
+                    const int nextActions = cur.actions;
+                    const auto it = dist.find(nextSig);
+                    if (it == dist.end() || nextActions < it->second) {
+                        dist[nextSig] = nextActions;
+                        parent[nextSig] = {cur.sig, ""};
+                        dq.push_front({nextActions, nextSig, std::move(next)});
+                    }
+                }
+            }
+        }
+
+        if (g_max_depth >= 0 && cur.actions >= g_max_depth) {
+            continue;
+        }
+
+        for (const ActionInfo& action : actionsList) {
+            if (!actionFitsInterval(action, cur.state.i, L)) continue;
+            Substate next;
+            if (!applyAction(next, cur.state, action, L)) continue;
+            if (!checkAlwaysConstraints(next, L)) continue;
+            if (!globalValid(next, L)) continue;
+
+            const int nextActions = cur.actions + 1;
+            if (g_max_depth >= 0 && nextActions > g_max_depth) continue;
+            const std::string nextSig = signature(next, L);
+            const auto it = dist.find(nextSig);
+            if (it == dist.end() || nextActions < it->second) {
+                dist[nextSig] = nextActions;
+                parent[nextSig] = {cur.sig, action.name};
+                dq.push_back({nextActions, nextSig, std::move(next)});
+            }
+        }
+    }
+
+    result = {};
+    return false;
+}
+
+static bool synthesizeConflictPlan(int L, PlanResult& result) {
+    const int maxIndex = std::max(0, nLoc - 2 * L);
+
+    SoftState initial;
+    initial.world.i = 0;
+    initial.world.lv = initial_lv_values;
+    initial.world.gv = initial_gv_values;
+    initial.sigma.assign(values.size(), SoftStatus::Open);
+    const int initialPenalty = advanceSoftStatuses(initial);
+
+    struct QueueEntry {
+        SoftCost cost;
+        std::string sig;
+        SoftState state;
+    };
+
+    auto cmp = [](const QueueEntry& a, const QueueEntry& b) {
+        return b.cost < a.cost;
+    };
+
+    std::priority_queue<QueueEntry, std::vector<QueueEntry>, decltype(cmp)> pq(cmp);
+    std::unordered_map<std::string, SoftCost> best;
+    std::unordered_map<std::string, ParentInfo> parent;
+
+    const std::string initialSig = softSignature(initial);
+    const SoftCost startCost{initialPenalty, 0};
+    best[initialSig] = startCost;
+    parent[initialSig] = {"", ""};
+    pq.push({startCost, initialSig, initial});
+
+    bool haveGoal = false;
+    SoftCost bestGoalCost;
+    std::string bestGoalSig;
+    SoftTerminalSummary bestGoalSummary;
+
+    while (!pq.empty()) {
+        const QueueEntry cur = pq.top();
+        pq.pop();
+
+        const auto itBest = best.find(cur.sig);
+        if (itBest == best.end() || itBest->second != cur.cost) continue;
+        if (haveGoal && !(cur.cost < bestGoalCost)) break;
+
+        if (cur.state.world.i == maxIndex) {
+            const SoftTerminalSummary summary = finalizeSoftState(cur.state);
+            const SoftCost totalCost = addCost(cur.cost, summary.penalty, 0);
+            if (!haveGoal || totalCost < bestGoalCost) {
+                haveGoal = true;
+                bestGoalCost = totalCost;
+                bestGoalSig = cur.sig;
+                bestGoalSummary = summary;
+            }
+        }
+
+        if (cur.state.world.i < maxIndex) {
+            SoftState next = cur.state;
+            next.world.i = cur.state.world.i + 1;
+            const int addLoc = next.world.i + 2 * L;
+            addLocFromInitial(next.world, addLoc);
+            const int penaltyInc = advanceSoftStatuses(next);
+            const SoftCost nextCost = addCost(cur.cost, penaltyInc, 0);
+            const std::string nextSig = softSignature(next);
+            const auto it = best.find(nextSig);
+            if (it == best.end() || nextCost < it->second) {
+                best[nextSig] = nextCost;
+                parent[nextSig] = {cur.sig, ""};
+                pq.push({nextCost, nextSig, std::move(next)});
+            }
+        }
+
+        if (g_max_depth >= 0 && cur.cost.actions >= g_max_depth) {
+            continue;
+        }
+
+        for (const ActionInfo& action : actionsList) {
+            if (!actionFitsInterval(action, cur.state.world.i, L)) continue;
+            WorldState nextWorld;
+            if (!applyWorldAction(nextWorld, cur.state.world, action, L)) continue;
+            SoftState next = cur.state;
+            next.world = std::move(nextWorld);
+            const int penaltyInc = advanceSoftStatuses(next);
+            const SoftCost nextCost = addCost(cur.cost, penaltyInc, 1);
+            if (g_max_depth >= 0 && nextCost.actions > g_max_depth) continue;
+            const std::string nextSig = softSignature(next);
+            const auto it = best.find(nextSig);
+            if (it == best.end() || nextCost < it->second) {
+                best[nextSig] = nextCost;
+                parent[nextSig] = {cur.sig, action.name};
+                pq.push({nextCost, nextSig, std::move(next)});
+            }
+        }
+    }
+
+    if (!haveGoal) {
+        result = {};
+        return false;
+    }
+
+    result.plan = reconstructPlan(bestGoalSig, parent);
+    result.penalty = bestGoalCost.penalty;
+    result.satisfied = bestGoalSummary.satisfied;
+    result.lost = bestGoalSummary.lost;
+    return true;
 }
 
 // ----- Input parsing and output emission -----
@@ -1449,6 +1944,7 @@ int main(int argc, char** argv) {
     CLI flags:
     - --L L: locality lookahead/limit parameter from the paper. Larger values
       allow more flexibility but reduce pruning. Default is 3.
+    - --mode MODE: one of arbitrary|shortest|conflict. Default is arbitrary.
     - --max-depth D: maximum number of action steps in the synthesized plan
       (default: 160). Use -1 to disable this bound.
     - --early-stop: if there are no F/U values, stop as soon as all FG/G
@@ -1457,10 +1953,23 @@ int main(int argc, char** argv) {
     int L = 3;  // default from the paper's traffic-light example
     int maxDepth = 160;
     bool earlyStop = false;
+    PlannerMode mode = PlannerMode::Arbitrary;
     for (int i = 1; i < argc; i++) {
         const std::string arg = argv[i];
         if (arg == "--L" && i + 1 < argc) {
             L = std::max(1, std::stoi(argv[++i]));
+        } else if (arg == "--mode" && i + 1 < argc) {
+            const std::string modeArg = argv[++i];
+            if (modeArg == "arbitrary") {
+                mode = PlannerMode::Arbitrary;
+            } else if (modeArg == "shortest") {
+                mode = PlannerMode::Shortest;
+            } else if (modeArg == "conflict") {
+                mode = PlannerMode::Conflict;
+            } else {
+                std::cerr << "Unknown mode: " << modeArg << '\n';
+                return 2;
+            }
         } else if (arg == "--max-depth" && i + 1 < argc) {
             maxDepth = std::stoi(argv[++i]);
         } else if (arg == "--early-stop") {
@@ -1476,14 +1985,31 @@ int main(int argc, char** argv) {
     g_no_fu = noFUValues();
     g_has_u = hasUValues();
 
-    std::vector<std::string> plan;
-    const bool found = synthesizePlan(L, plan);
+    PlanResult result;
+    bool found = false;
+    if (mode == PlannerMode::Arbitrary) {
+        found = synthesizeArbitraryPlan(L, result);
+    } else if (mode == PlannerMode::Shortest) {
+        found = synthesizeShortestPlan(L, result);
+    } else {
+        found = synthesizeConflictPlan(L, result);
+    }
 
     if (!found) {
-        std::cerr << "No satisfying plan found (L=" << L << ").\n";
+        if (mode == PlannerMode::Conflict) {
+            std::cerr << "No conflict-resolution plan found (L=" << L << ").\n";
+        } else {
+            std::cerr << "No satisfying plan found (L=" << L << ").\n";
+        }
         return 1;
     }
 
-    writeOutput(plan);
+    const char* modeName = (mode == PlannerMode::Arbitrary) ? "arbitrary"
+                           : (mode == PlannerMode::Shortest) ? "shortest"
+                                                              : "conflict";
+    std::cerr << "RESULT mode=" << modeName << " plan_length=" << result.plan.size()
+              << " penalty=" << result.penalty << " satisfied=" << result.satisfied
+              << " lost=" << result.lost << '\n';
+    writeOutput(result.plan);
     return 0;
 }
