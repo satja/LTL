@@ -1,0 +1,52 @@
+This is BibTeX, Version 0.99d
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: paper.aux
+Reallocating 'name_of_file' (item size: 1) to 15 items.
+The style file: elsarticle-num.bst
+Reallocating 'name_of_file' (item size: 1) to 11 items.
+Database file #1: references.bib
+Warning--empty pages in yoo2013probabilistic
+Warning--empty pages in favorito2023DPLL
+Warning--empty pages in giacomo2025
+You've used 26 entries,
+            2952 wiz_defined-function locations,
+            864 strings with 12197 characters,
+and the built_in function-call counts, 9896 in all, are:
+= -- 929
+> -- 329
+< -- 11
++ -- 126
+- -- 100
+* -- 747
+:= -- 1289
+add.period$ -- 44
+call.type$ -- 26
+change.case$ -- 25
+chr.to.int$ -- 0
+cite$ -- 29
+duplicate$ -- 342
+empty$ -- 1128
+format.name$ -- 123
+if$ -- 2591
+int.to.chr$ -- 0
+int.to.str$ -- 26
+missing$ -- 27
+newline$ -- 110
+num.names$ -- 32
+pop$ -- 201
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 657
+stack$ -- 0
+substring$ -- 483
+swap$ -- 142
+text.length$ -- 11
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 3
+while$ -- 66
+width$ -- 28
+write$ -- 270
+(There were 3 warnings)
